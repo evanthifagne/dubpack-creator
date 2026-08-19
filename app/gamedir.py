@@ -54,12 +54,26 @@ class Candidate:
 # ---------------------------------------------------------------------------
 
 def load_settings() -> dict:
-    if SETTINGS_FILE.exists():
+    """Lit les réglages. Un fichier illisible est mis de côté, pas ignoré.
+
+    Sans cela, un settings.json abîmé (édition à la main, antislashs Windows non
+    échappés) ferait silencieusement oublier le dossier du jeu, sans que
+    personne comprenne pourquoi.
+    """
+    if not SETTINGS_FILE.exists():
+        return {}
+    try:
+        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+        broken = SETTINGS_FILE.with_suffix(".json.bad")
         try:
-            return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+            SETTINGS_FILE.replace(broken)
+            print(f"  settings.json illisible ({exc}); mis de cote dans {broken.name}. "
+                  "Les reglages repartent de zero.", flush=True)
+        except OSError:
             pass
-    return {}
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def save_settings(data: dict) -> dict:
