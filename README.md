@@ -241,5 +241,8 @@ ni à ses auteurs, et ne reprend aucun code du
 [dépôt de référence](https://github.com/Loganrithm/choicervoicerdubpackeditor)
 (qui ne publie que son README et une licence interdisant les dérivés).
 
+Sous licence MIT — voir [LICENSE](LICENSE). Les composants tiers et leurs
+licences sont listés dans [THIRD-PARTY.md](THIRD-PARTY.md).
+
 Respecte les droits des vidéos que tu utilises et les règles de la communauté
 du jeu.

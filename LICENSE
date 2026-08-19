@@ -19,12 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Ce projet est independant : il n'est affilie ni au jeu The Choicer Voicer ni a
-ses auteurs, et ne reprend aucun code d'un autre outil de creation de packs.
-
-Les composants tiers utilises a l'execution gardent leurs propres licences :
-FFmpeg (LGPL/GPL), Whisper via faster-whisper (MIT), yt-dlp (Unlicense),
-FastAPI (MIT), NumPy et SciPy (BSD), et si tu l'installes, Demucs (MIT).
