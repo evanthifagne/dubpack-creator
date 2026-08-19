@@ -1,0 +1,998 @@
+/* DubPack Creator — interface locale */
+'use strict';
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+const state = {
+  caps: null,
+  project: null,
+  selected: null,
+  pollTimer: null,
+  saveTimer: null,
+  peaks: [],
+  pendingFile: null,
+  previewAudio: new Audio(),
+  filter: '',
+  settings: {},
+  gameCandidates: [],
+};
+
+/* ----------------------------------------------------------------- utils */
+const fmt = (s) => {
+  s = Math.max(0, Number(s) || 0);
+  const m = Math.floor(s / 60);
+  return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`;
+};
+const num = (v, fallback = 0) => {
+  const n = parseFloat(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : fallback;
+};
+
+function toast(message, kind = '') {
+  const el = document.createElement('div');
+  el.className = `toast ${kind}`;
+  el.textContent = message;
+  $('#toasts').append(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, kind === 'err' ? 8000 : 4000);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    let detail = `Erreur ${res.status}`;
+    try { detail = (await res.json()).detail || detail; } catch { /* réponse non JSON */ }
+    throw new Error(detail);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+/* ------------------------------------------------------------ diagnostic */
+async function loadCaps() {
+  state.caps = await api('/api/capabilities');
+  const c = state.caps;
+  const badges = [
+    ['ffmpeg', !!c.ffmpeg],
+    ['Theora', !!c.theora],
+    [c.asr_engines[0] || 'Whisper manquant', c.asr_engines.length > 0],
+    ['yt-dlp', !!c.yt_dlp],
+    [c.demucs ? 'Demucs' : 'Demucs absent', !!c.demucs],
+  ];
+  $('#caps').innerHTML = badges
+    .map(([label, ok]) => `<span class="cap ${ok ? 'ok' : 'no'}">${ok ? '●' : '○'} ${label}</span>`)
+    .join('');
+
+  for (const sel of ['#set-model', '#re-model']) {
+    $(sel).innerHTML = c.models
+      .map((m) => `<option value="${m}"${m === c.default_model ? ' selected' : ''}>${m}</option>`)
+      .join('');
+  }
+  if (!c.picker) {
+    // Sans tkinter, pas de boîte de dialogue système: on saisit le chemin à la main.
+    const note = "Boîte de dialogue système indisponible sur cette installation de Python. "
+      + 'Colle le chemin du dossier dans le champ juste en dessous.';
+    ['#btn-pick-game', '#btn-pick-folder'].forEach((sel) => {
+      const btn = $(sel);
+      if (!btn) return;
+      btn.disabled = true;
+      btn.title = note;
+    });
+  }
+  if (!c.ffmpeg) toast(c.ffmpeg_error || 'ffmpeg est introuvable.', 'err');
+  if (!c.asr_engines.length) toast('Aucun moteur de transcription installé (pip install faster-whisper).', 'err');
+  else if (!c.theora) toast("ffmpeg n'a pas libtheora : l'export vidéo échouera.", 'err');
+}
+
+/* --------------------------------------------------------------- accueil */
+function settingsFromForm() {
+  return {
+    model: $('#set-model').value,
+    language: $('#set-language').value,
+    speakers: $('#set-speakers').value,
+    max_line: num($('#set-maxline').value, 9),
+  };
+}
+
+function refreshCreateButton() {
+  const ready = !!state.pendingFile || $('#url-input').value.trim().length > 8;
+  $('#btn-create').disabled = !ready;
+  $('#create-hint').textContent = ready ? 'Tout se passe en local sur ta machine.' : 'Ajoute d\'abord un fichier ou un lien.';
+}
+
+function setupHome() {
+  const dz = $('#dropzone');
+  const input = $('#file-input');
+
+  ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => {
+    e.preventDefault(); dz.classList.add('over');
+  }));
+  ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => {
+    e.preventDefault(); dz.classList.remove('over');
+  }));
+  dz.addEventListener('drop', (e) => {
+    const file = e.dataTransfer?.files?.[0];
+    if (file) pickFile(file);
+  });
+  $('#btn-pick').addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { if (input.files[0]) pickFile(input.files[0]); });
+  $('#url-input').addEventListener('input', () => {
+    if ($('#url-input').value.trim()) { state.pendingFile = null; $('#picked').hidden = true; }
+    refreshCreateButton();
+  });
+  $('#btn-create').addEventListener('click', createProject);
+  $('#btn-home').addEventListener('click', () => showHome());
+  refreshCreateButton();
+}
+
+function pickFile(file) {
+  state.pendingFile = file;
+  $('#url-input').value = '';
+  const mb = (file.size / 1048576).toFixed(1);
+  $('#picked').textContent = `✓ ${file.name} (${mb} Mo)`;
+  $('#picked').hidden = false;
+  refreshCreateButton();
+}
+
+async function createProject() {
+  const settings = settingsFromForm();
+  const body = new FormData();
+  body.append('settings', JSON.stringify(settings));
+  if (state.pendingFile) body.append('file', state.pendingFile);
+  else body.append('url', $('#url-input').value.trim());
+
+  $('#btn-create').disabled = true;
+  try {
+    const res = await api('/api/projects/import', { method: 'POST', body });
+    openJob(res.job, 'Création du dub pack', async () => {
+      await openProject(res.project_id);
+      toast('Dub pack généré. Vérifie les répliques et les personnages.', 'ok');
+    });
+  } catch (err) {
+    toast(err.message, 'err');
+  } finally {
+    $('#btn-create').disabled = false;
+  }
+}
+
+async function loadProjects() {
+  const list = await api('/api/projects');
+  const box = $('#project-list');
+  if (!list.length) {
+    box.innerHTML = '<p class="muted small">Aucun projet pour le moment.</p>';
+    return;
+  }
+  box.innerHTML = '';
+  for (const p of list) {
+    const card = document.createElement('div');
+    card.className = 'project-card';
+    const chars = p.characters?.filter(Boolean).join(', ') || '—';
+    card.innerHTML = `<div style="min-width:0">
+        <h3>${escapeHtml(p.name)}</h3>
+        <p>${p.lines} répliques · ${escapeHtml(chars)}</p>
+      </div>
+      <button class="pc-del" title="Supprimer">🗑</button>`;
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.pc-del')) return;
+      openProject(p.id);
+    });
+    $('.pc-del', card).addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Supprimer « ${p.name} » et tous ses fichiers ?`)) return;
+      await api(`/api/projects/${p.id}`, { method: 'DELETE' });
+      loadProjects();
+    });
+    box.append(card);
+  }
+}
+
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ------------------------------------------------------------------ jobs */
+function openJob(job, title, onDone) {
+  $('#job-title').textContent = title;
+  $('#job-overlay').hidden = false;
+  $('#job-steps').innerHTML = '';
+  $('#btn-cancel-job').onclick = () => api(`/api/jobs/${job.id}/cancel`, { method: 'POST' });
+  pollJob(job.id, onDone);
+}
+
+function closeJob() {
+  $('#job-overlay').hidden = true;
+  clearTimeout(state.pollTimer);
+}
+
+function pollJob(jobId, onDone) {
+  clearTimeout(state.pollTimer);
+  const tick = async () => {
+    let job;
+    try {
+      job = await api(`/api/jobs/${jobId}`);
+    } catch (err) {
+      closeJob(); toast(err.message, 'err'); return;
+    }
+    $('#job-bar').style.width = `${(job.progress * 100).toFixed(1)}%`;
+    $('#job-label').textContent = job.label || '…';
+    $('#job-steps').innerHTML = (job.steps || []).slice(-8).map((s) => `<div>${escapeHtml(s.label)}</div>`).join('');
+    if (job.status === 'done') { closeJob(); onDone?.(job.result); return; }
+    if (job.status === 'error') { closeJob(); toast(job.error || 'Échec de la tâche.', 'err'); return; }
+    if (job.status === 'cancelled') { closeJob(); toast('Tâche annulée.'); return; }
+    state.pollTimer = setTimeout(tick, 600);
+  };
+  tick();
+}
+
+/* ---------------------------------------------------------------- écrans */
+function showHome() {
+  $('#view-home').hidden = false;
+  $('#view-editor').hidden = true;
+  $('#btn-home').hidden = true;
+  $('#video').pause();
+  state.project = null;
+  loadProjects();
+}
+
+async function openProject(id) {
+  const project = await api(`/api/projects/${id}`);
+  state.project = project;
+  state.selected = null;
+  $('#view-home').hidden = true;
+  $('#view-editor').hidden = false;
+  $('#btn-home').hidden = false;
+
+  const video = $('#video');
+  video.src = `/api/projects/${id}/media`;
+  video.load();
+
+  try { state.peaks = (await api(`/api/projects/${id}/waveform`)).peaks || []; } catch { state.peaks = []; }
+
+  fillPackForm();
+  renderCharacters();
+  renderLines();
+  drawWave();
+  renderTimeline();
+  refreshBacking();
+  validate();
+  if (project._job && ['running', 'pending'].includes(project._job.status)) {
+    openJob(project._job, 'Traitement en cours', () => openProject(id));
+  }
+}
+
+/* --------------------------------------------------------------- édition */
+const lines = () => state.project?.lines || [];
+const chars = () => state.project?.characters || [];
+
+function charOf(id) { return chars().find((c) => c.id === id); }
+function colorOf(id) { return charOf(id)?.color || '#f97316'; }
+function nameOf(id) { return charOf(id)?.name || id || 'Personnage'; }
+
+function sortLines() {
+  lines().sort((a, b) => a.start - b.start);
+}
+
+function scheduleSave() {
+  clearTimeout(state.saveTimer);
+  state.saveTimer = setTimeout(save, 700);
+}
+
+async function save() {
+  if (!state.project) return;
+  const p = state.project;
+  try {
+    await api(`/api/projects/${p.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: p.name, pack: p.pack, characters: p.characters,
+        lines: p.lines, options: p.options,
+      }),
+    });
+  } catch (err) {
+    toast(`Sauvegarde impossible : ${err.message}`, 'err');
+  }
+}
+
+function fillPackForm() {
+  const p = state.project;
+  const pack = p.pack || {};
+  $('#pack-title').value = pack.title || p.name || '';
+  $('#pack-subtitle').value = pack.subtitle || '';
+  $('#pack-authors').value = (pack.authors || []).join(', ');
+  $('#pack-description').value = pack.description || '';
+  const o = p.options || {};
+  $('#opt-normalize').checked = o.normalize_clips !== false;
+  $('#opt-timestamp').checked = !!o.include_timestamp_in_name;
+  $('#opt-dubonly').checked = !!o.dub_only;
+  $('#opt-height').value = String(o.video_height || 720);
+  $('#opt-vq').value = String(o.video_quality || 7);
+  const asr = p.asr || {};
+  $('#stats').textContent = asr.engine
+    ? `${asr.engine} · ${asr.model} · ${asr.language || '?'} · voix : ${asr.diarization || '—'}`
+    : '';
+  if (asr.model) $('#re-model').value = asr.model;
+}
+
+function readPackForm() {
+  const p = state.project;
+  p.pack = {
+    title: $('#pack-title').value.trim(),
+    subtitle: $('#pack-subtitle').value.trim(),
+    authors: $('#pack-authors').value.split(',').map((s) => s.trim()).filter(Boolean),
+    description: $('#pack-description').value.trim(),
+  };
+  p.name = p.pack.title || p.name;
+  p.options = {
+    ...(p.options || {}),
+    normalize_clips: $('#opt-normalize').checked,
+    include_timestamp_in_name: $('#opt-timestamp').checked,
+    dub_only: $('#opt-dubonly').checked,
+    video_height: num($('#opt-height').value, 720),
+    video_quality: num($('#opt-vq').value, 7),
+  };
+  scheduleSave();
+}
+
+/* ---------------------------------------------------------- personnages */
+function renderCharacters() {
+  const box = $('#characters');
+  box.innerHTML = '';
+  const counts = {};
+  for (const l of lines()) counts[l.speaker] = (counts[l.speaker] || 0) + 1;
+
+  for (const c of chars()) {
+    const row = document.createElement('div');
+    row.className = 'char-row';
+    const stamp = Date.now();
+    row.innerHTML = `<span class="char-swatch" style="background:${c.color}"></span>
+      ${c.image
+        ? `<img class="char-portrait" src="/api/projects/${state.project.id}/character-image/${encodeURIComponent(c.id)}?t=${stamp}" alt="">`
+        : ''}
+      <input type="text" value="${escapeHtml(c.name)}" placeholder="Nom du personnage">
+      <button class="line-btn char-shot" title="Utiliser l'image actuelle de la vidéo comme portrait">📷</button>
+      ${c.image ? '<button class="line-btn char-shot-del" title="Retirer le portrait">✕</button>' : ''}
+      <span class="char-count">${counts[c.id] || 0} rép.</span>`;
+    const input = $('input', row);
+    input.addEventListener('input', () => {
+      c.name = input.value;
+      renderLines(); renderTimeline(); scheduleSave();
+    });
+    $('.char-shot', row).addEventListener('click', async () => {
+      try {
+        await api(`/api/projects/${state.project.id}/character-image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ speaker_id: c.id, at: $('#video').currentTime }),
+        });
+        state.project = await api(`/api/projects/${state.project.id}`);
+        renderCharacters();
+        toast(`Portrait de ${c.name} enregistré.`, 'ok');
+      } catch (err) { toast(err.message, 'err'); }
+    });
+    $('.char-shot-del', row)?.addEventListener('click', async () => {
+      await api(`/api/projects/${state.project.id}/character-image/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+      c.image = null;
+      renderCharacters();
+    });
+    box.append(row);
+  }
+  if (!chars().length) box.innerHTML = '<p class="muted small">Aucun personnage détecté.</p>';
+
+  const sugg = state.project.suggestions || [];
+  $('#suggestions-box').hidden = sugg.length === 0;
+  $('#suggestions').innerHTML = sugg
+    .map((s) => `<button class="chip" data-name="${escapeHtml(s.name)}">${escapeHtml(s.name)} <span class="muted">×${s.count}</span></button>`)
+    .join('');
+  $$('#suggestions .chip').forEach((chip) => chip.addEventListener('click', () => {
+    const target = chars().find((c) => c.name === c.id) || chars()[0];
+    if (!target) return;
+    target.name = chip.dataset.name;
+    renderCharacters(); renderLines(); renderTimeline(); scheduleSave();
+  }));
+}
+
+/* --------------------------------------------------------------- lignes */
+function renderLines() {
+  const box = $('#lines');
+  const tpl = $('#tpl-line');
+  box.innerHTML = '';
+  sortLines();
+  const filter = state.filter.toLowerCase();
+  const all = lines();
+  $('#line-count').textContent = all.length;
+
+  all.forEach((line, index) => {
+    if (filter && !(line.text || '').toLowerCase().includes(filter)
+        && !nameOf(line.speaker).toLowerCase().includes(filter)) return;
+
+    const node = tpl.content.cloneNode(true).firstElementChild;
+    node.dataset.id = line.id;
+    $('.line-bar', node).style.background = colorOf(line.speaker);
+    $('.line-index', node).textContent = index + 1;
+
+    const sel = $('.line-speaker', node);
+    sel.innerHTML = chars().map((c) =>
+      `<option value="${escapeHtml(c.id)}"${c.id === line.speaker ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+    sel.addEventListener('change', () => {
+      line.speaker = sel.value;
+      $('.line-bar', node).style.background = colorOf(line.speaker);
+      renderCharacters(); renderTimeline(); scheduleSave();
+    });
+
+    const startEl = $('.line-start', node);
+    const endEl = $('.line-end', node);
+    startEl.value = line.start.toFixed(2);
+    endEl.value = line.end.toFixed(2);
+    const commitTimes = () => {
+      const s = Math.max(0, num(startEl.value, line.start));
+      const e = Math.max(s + 0.05, num(endEl.value, line.end));
+      line.start = Math.round(s * 1000) / 1000;
+      line.end = Math.round(e * 1000) / 1000;
+      startEl.value = line.start.toFixed(2);
+      endEl.value = line.end.toFixed(2);
+      updateDuration(node, line);
+      renderTimeline(); validate(); scheduleSave();
+    };
+    startEl.addEventListener('change', commitTimes);
+    endEl.addEventListener('change', commitTimes);
+    updateDuration(node, line);
+
+    const text = $('.line-text', node);
+    text.value = line.text || '';
+    text.addEventListener('input', () => { line.text = text.value; scheduleSave(); });
+    text.addEventListener('focus', () => selectLine(line.id, false));
+
+    const chk = $('.line-enabled input', node);
+    chk.checked = line.enabled !== false;
+    chk.addEventListener('change', () => {
+      line.enabled = chk.checked;
+      node.classList.toggle('off', !chk.checked);
+      renderTimeline(); validate(); scheduleSave();
+    });
+    node.classList.toggle('off', line.enabled === false);
+
+    $('.line-play', node).addEventListener('click', () => playLine(line));
+    $('.line-split', node).addEventListener('click', () => splitLine(line));
+    $('.line-merge', node).addEventListener('click', () => mergeLine(line));
+    $('.line-del', node).addEventListener('click', () => {
+      state.project.lines = all.filter((l) => l.id !== line.id);
+      renderLines(); renderTimeline(); renderCharacters(); validate(); scheduleSave();
+    });
+    node.addEventListener('click', (e) => {
+      if (!e.target.closest('button, input, select, textarea')) selectLine(line.id, true);
+    });
+    if (line.id === state.selected) node.classList.add('sel');
+    box.append(node);
+  });
+}
+
+function updateDuration(node, line) {
+  const d = line.end - line.start;
+  const el = $('.line-dur', node);
+  el.textContent = `${d.toFixed(2)}s`;
+  el.className = `line-dur${d > 60 ? ' bad' : d > 12 ? ' long' : ''}`;
+}
+
+function selectLine(id, seek) {
+  state.selected = id;
+  $$('#lines .line').forEach((n) => n.classList.toggle('sel', n.dataset.id === id));
+  $$('#tl-lines .tl-line').forEach((n) => n.classList.toggle('sel', n.dataset.id === id));
+  const line = lines().find((l) => l.id === id);
+  if (line && seek) $('#video').currentTime = line.start;
+}
+
+function splitLine(line) {
+  const at = $('#video').currentTime;
+  if (at <= line.start + 0.1 || at >= line.end - 0.1) {
+    toast('Place le curseur de lecture à l\'intérieur de la réplique pour la couper.');
+    return;
+  }
+  const words = (line.text || '').split(/\s+/);
+  const ratio = (at - line.start) / (line.end - line.start);
+  const cut = Math.max(1, Math.round(words.length * ratio));
+  const second = {
+    ...line,
+    id: Math.random().toString(36).slice(2, 12),
+    start: Math.round(at * 1000) / 1000,
+    text: words.slice(cut).join(' '),
+  };
+  line.end = Math.round(at * 1000) / 1000;
+  line.text = words.slice(0, cut).join(' ');
+  state.project.lines.push(second);
+  renderLines(); renderTimeline(); validate(); scheduleSave();
+}
+
+function mergeLine(line) {
+  sortLines();
+  const all = lines();
+  const idx = all.findIndex((l) => l.id === line.id);
+  const next = all[idx + 1];
+  if (!next) { toast('Pas de réplique suivante à fusionner.'); return; }
+  line.end = next.end;
+  line.text = `${line.text || ''} ${next.text || ''}`.trim();
+  state.project.lines = all.filter((l) => l.id !== next.id);
+  renderLines(); renderTimeline(); renderCharacters(); validate(); scheduleSave();
+}
+
+function addLine() {
+  const at = $('#video').currentTime;
+  const dur = state.project.source?.duration || 0;
+  const line = {
+    id: Math.random().toString(36).slice(2, 12),
+    start: Math.round(at * 1000) / 1000,
+    end: Math.round(Math.min(at + 2, dur || at + 2) * 1000) / 1000,
+    text: '', speaker: chars()[0]?.id || null, enabled: true, tags: [], dub_only: false,
+  };
+  if (!chars().length) {
+    state.project.characters = [{ id: 'Personnage 1', name: 'Personnage 1', color: '#f97316', image: null }];
+    line.speaker = 'Personnage 1';
+  }
+  state.project.lines.push(line);
+  renderCharacters(); renderLines(); renderTimeline(); scheduleSave();
+  selectLine(line.id, false);
+}
+
+function playLine(line) {
+  const audio = state.previewAudio;
+  audio.pause();
+  audio.src = `/api/projects/${state.project.id}/preview?start=${line.start}&end=${line.end}`;
+  audio.play().catch(() => toast('Lecture impossible pour cet extrait.'));
+  selectLine(line.id, false);
+}
+
+/* ------------------------------------------------------------- timeline */
+function drawWave() {
+  const canvas = $('#wave');
+  const box = $('#timeline');
+  const dpr = window.devicePixelRatio || 1;
+  const w = box.clientWidth;
+  const h = box.clientHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  const peaks = state.peaks;
+  if (!peaks.length) {
+    ctx.fillStyle = '#8b98ad';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('Forme d\'onde indisponible', 12, h / 2);
+    return;
+  }
+  const mid = h * 0.28;
+  ctx.fillStyle = 'rgba(148,163,184,.55)';
+  for (let x = 0; x < w; x++) {
+    const p = peaks[Math.floor((x / w) * peaks.length)] || 0;
+    const amp = Math.max(1, p * mid * 0.95);
+    ctx.fillRect(x, mid - amp, 1, amp * 2);
+  }
+}
+
+function renderTimeline() {
+  const box = $('#tl-lines');
+  const dur = state.project?.source?.duration || 0;
+  box.innerHTML = '';
+  if (!dur) return;
+  for (const line of lines()) {
+    const el = document.createElement('div');
+    el.className = `tl-line${line.enabled === false ? ' off' : ''}${line.id === state.selected ? ' sel' : ''}`;
+    el.dataset.id = line.id;
+    el.style.left = `${(line.start / dur) * 100}%`;
+    el.style.width = `${Math.max(((line.end - line.start) / dur) * 100, 0.35)}%`;
+    el.style.background = colorOf(line.speaker);
+    el.title = `${nameOf(line.speaker)} — ${line.text || ''}`;
+    el.textContent = nameOf(line.speaker);
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectLine(line.id, true);
+      const node = $(`#lines .line[data-id="${line.id}"]`);
+      node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+    box.append(el);
+  }
+}
+
+function setupTimeline() {
+  const box = $('#timeline');
+  box.addEventListener('click', (e) => {
+    if (e.target.closest('.tl-line')) return;
+    const dur = state.project?.source?.duration || 0;
+    const rect = box.getBoundingClientRect();
+    $('#video').currentTime = ((e.clientX - rect.left) / rect.width) * dur;
+  });
+  window.addEventListener('resize', () => { drawWave(); });
+}
+
+/* --------------------------------------------------------------- lecture */
+function setupPlayer() {
+  const video = $('#video');
+  $('#btn-play').addEventListener('click', () => (video.paused ? video.play() : video.pause()));
+  $('#btn-prev').addEventListener('click', () => jumpLine(-1));
+  $('#btn-next').addEventListener('click', () => jumpLine(1));
+  video.addEventListener('play', () => { $('#btn-play').textContent = '❚❚'; });
+  video.addEventListener('pause', () => { $('#btn-play').textContent = '▶︎'; });
+
+  video.addEventListener('timeupdate', () => {
+    const dur = state.project?.source?.duration || video.duration || 0;
+    $('#playhead').style.left = `${(video.currentTime / dur) * 100}%`;
+    $('#timecode').textContent = `${fmt(video.currentTime)} / ${fmt(dur)}`;
+
+    const current = lines().find((l) => video.currentTime >= l.start && video.currentTime < l.end);
+    const overlay = $('#subtitle-overlay');
+    if (current) {
+      overlay.innerHTML = `<span class="who" style="color:${colorOf(current.speaker)}">${escapeHtml(nameOf(current.speaker))}</span>${escapeHtml(current.text || '')}`;
+    } else {
+      overlay.innerHTML = '';
+    }
+    if ($('#chk-loop').checked && state.selected) {
+      const line = lines().find((l) => l.id === state.selected);
+      if (line && (video.currentTime >= line.end || video.currentTime < line.start - 0.05)) {
+        video.currentTime = line.start;
+      }
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (state.project === null || $('#view-editor').hidden) return;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+    if (e.code === 'Space' && !typing) { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+    if (typing) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - (e.shiftKey ? 5 : 1)); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); video.currentTime += e.shiftKey ? 5 : 1; }
+    if (e.key === 'j') jumpLine(-1);
+    if (e.key === 'k') jumpLine(1);
+  });
+}
+
+function jumpLine(delta) {
+  sortLines();
+  const all = lines();
+  if (!all.length) return;
+  const video = $('#video');
+  let idx = all.findIndex((l) => l.id === state.selected);
+  if (idx === -1) idx = all.findIndex((l) => l.end > video.currentTime);
+  idx = Math.max(0, Math.min(all.length - 1, (idx === -1 ? 0 : idx) + delta));
+  const line = all[idx];
+  selectLine(line.id, true);
+  $(`#lines .line[data-id="${line.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+/* ---------------------------------------------------------------- export */
+async function validate() {
+  if (!state.project) return;
+  try {
+    const { issues } = await api(`/api/projects/${state.project.id}/validate`);
+    const box = $('#issues');
+    if (!issues.length) {
+      box.innerHTML = '<div class="issue ok">Tout est prêt pour l\'export.</div>';
+    } else {
+      box.innerHTML = issues.map((i) =>
+        `<div class="issue ${i.level}">${escapeHtml(i.message)}</div>`).join('');
+    }
+    $('#btn-export').disabled = issues.some((i) => i.level === 'error');
+  } catch { /* la validation est indicative */ }
+}
+
+function refreshBacking() {
+  const assets = state.project.assets || {};
+  const box = $('#backing-state');
+  if (assets.backing_track) {
+    const mode = assets.backing_mode === 'demucs' ? 'voix séparées (Demucs)' : 'audio d\'origine';
+    box.className = 'backing-state on';
+    box.innerHTML = `✓ <code>_backing_track.ogg</code> prêt — ${mode}. <button class="link" id="btn-drop-backing">retirer</button>`;
+    $('#btn-drop-backing').addEventListener('click', async () => {
+      await api(`/api/projects/${state.project.id}/backing`, { method: 'DELETE' });
+      state.project.assets.backing_track = null;
+      delete state.project.assets.backing_track;
+      refreshBacking();
+    });
+  } else {
+    box.className = 'backing-state';
+    box.textContent = 'Aucun fond sonore : le pack utilisera uniquement ta voix.';
+  }
+  $('#btn-demucs').disabled = !state.caps?.demucs;
+  $('#btn-demucs').title = state.caps?.demucs ? '' : 'Demucs n\'est pas installé (pip install demucs)';
+}
+
+function setupExport() {
+  $('#btn-demucs').addEventListener('click', () => runBacking('demucs'));
+  $('#btn-backing-orig').addEventListener('click', () => runBacking('original'));
+
+  $('#btn-export').addEventListener('click', async () => {
+    readPackForm();
+    await save();
+    const destination = currentDestination();
+    const body = {
+      reuse_video: true,
+      destination,
+      overwrite: $('#opt-overwrite').checked,
+      make_zip: $('#opt-makezip').checked,
+    };
+    if (destination === 'game') body.target_path = $('#game-path').value.trim();
+    if (destination === 'folder') body.target_path = $('#folder-path').value.trim();
+
+    if (destination === 'game' && !body.target_path) {
+      toast('Indique d\'abord le dossier du jeu (Détecter ou Choisir).', 'err');
+      return;
+    }
+    if (destination === 'folder' && !body.target_path) {
+      toast('Choisis le dossier de destination.', 'err');
+      return;
+    }
+    if (destination === 'game' && !confirm(
+      `Le pack va être écrit dans les fichiers du jeu :\n\n${body.target_path}\n\nContinuer ?`)) return;
+
+    saveSettings({
+      export_destination: destination,
+      export_folder: destination === 'folder' ? body.target_path : state.settings.export_folder,
+      game_dir: destination === 'game' ? body.target_path : state.settings.game_dir,
+    });
+    try {
+      const res = await api(`/api/projects/${state.project.id}/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      openJob(res.job, 'Export du dub pack', (result) => showExportResult(result));
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+  });
+
+  $('#btn-reanalyze').addEventListener('click', async () => {
+    if (!confirm('Retranscrire ? Les répliques actuelles seront remplacées.')) return;
+    try {
+      const res = await api(`/api/projects/${state.project.id}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: $('#re-model').value,
+          speakers: $('#re-speakers').value,
+          language: $('#set-language').value,
+          max_line: state.project.asr?.max_line || 9,
+          keep_names: true,
+        }),
+      });
+      openJob(res.job, 'Nouvelle transcription', () => openProject(state.project.id));
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+  });
+
+  ['#pack-title', '#pack-subtitle', '#pack-authors', '#pack-description',
+   '#opt-normalize', '#opt-timestamp', '#opt-dubonly', '#opt-height', '#opt-vq']
+    .forEach((sel) => $(sel).addEventListener('change', readPackForm));
+  $('#pack-title').addEventListener('input', readPackForm);
+
+  $$('.tab').forEach((tab) => tab.addEventListener('click', () => {
+    $$('.tab').forEach((t) => t.classList.toggle('active', t === tab));
+    $$('.tab-body').forEach((b) => { b.hidden = b.dataset.body !== tab.dataset.tab; });
+  }));
+
+  $('#line-filter').addEventListener('input', (e) => {
+    state.filter = e.target.value;
+    renderLines();
+  });
+  $('#btn-add-line').addEventListener('click', addLine);
+}
+
+async function runBacking(mode) {
+  try {
+    const res = await api(`/api/projects/${state.project.id}/backing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+    openJob(res.job, mode === 'demucs' ? 'Séparation des voix' : 'Préparation du fond sonore',
+      async () => {
+        state.project = await api(`/api/projects/${state.project.id}`);
+        refreshBacking();
+        toast('Fond sonore prêt.', 'ok');
+      });
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+function showExportResult(result) {
+  const box = $('#export-result');
+  box.hidden = false;
+  const installed = result.destination === 'game';
+  const zipLink = result.zip
+    ? `<a class="btn btn-primary" href="/api/projects/${state.project.id}/download">Télécharger le ZIP</a>`
+    : '';
+  const steps = installed
+    ? `<ol>
+        <li>Le pack est déjà en place dans <code>packs_voice</code>.</li>
+        <li>Lance Choicer Voicer (ou reviens au menu principal).</li>
+        <li>Sélectionne le pack en mode Dub.</li>
+       </ol>`
+    : `<ol>
+        <li>${result.zip ? 'Décompresse le ZIP (ou prends le dossier directement).' : 'Ouvre le dossier exporté.'}</li>
+        <li>Copie le dossier <code>${escapeHtml(result.pack_name)}</code> dans <code>packs_voice</code> du jeu.</li>
+        <li>Vérifie que <code>packs_voice/${escapeHtml(result.pack_name)}/dub_video.ogv</code> existe (pas de dossier en trop).</li>
+        <li>Lance Choicer Voicer et sélectionne le pack en mode Dub.</li>
+       </ol>`;
+  box.innerHTML = `<h3>${installed ? 'Pack installé dans le jeu' : 'Pack exporté'}</h3>
+    <p>${result.clips} clips · ${result.characters.length} personnage(s) · ${result.files} fichiers</p>
+    <p class="path">${escapeHtml(result.folder)}</p>
+    <div class="btn-row">
+      ${zipLink}
+      <button class="btn btn-ghost" id="btn-reveal">Ouvrir le dossier</button>
+    </div>
+    ${steps}`;
+  $('#btn-reveal').addEventListener('click', () =>
+    api(`/api/projects/${state.project.id}/reveal`, { method: 'POST' }).catch((e) => toast(e.message, 'err')));
+  toast(installed ? 'Pack installé dans le jeu.' : 'Export terminé.', 'ok');
+}
+
+/* ---------------------------------------------------------- destination */
+function currentDestination() {
+  return $$('input[name="dest"]').find((r) => r.checked)?.value || 'zip';
+}
+
+function refreshDestination() {
+  const dest = currentDestination();
+  $$('.dest-body').forEach((b) => { b.hidden = b.dataset.dest !== dest; });
+  $('#zip-too-row').hidden = dest !== 'game';
+  $('#btn-export').textContent = dest === 'game'
+    ? 'Exporter et installer dans le jeu'
+    : dest === 'folder' ? 'Exporter dans ce dossier' : 'Exporter le dub pack';
+}
+
+async function saveSettings(patch) {
+  state.settings = { ...state.settings, ...patch };
+  try {
+    await api('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+  } catch { /* réglage non bloquant */ }
+}
+
+async function loadSettings() {
+  try {
+    state.settings = await api('/api/settings');
+  } catch {
+    state.settings = {};
+  }
+  const s = state.settings;
+  if (s.game_dir) {
+    $('#game-path').value = s.game_dir;
+    setGameState(`✓ Jeu sélectionné : ${s.game_dir}`, true);
+  }
+  if (s.export_folder) $('#folder-path').value = s.export_folder;
+  const dest = s.export_destination || (s.game_dir ? 'game' : 'zip');
+  const radio = $$('input[name="dest"]').find((r) => r.value === dest);
+  if (radio) radio.checked = true;
+  if (s.make_zip) $('#opt-makezip').checked = true;
+  refreshDestination();
+}
+
+function setGameState(message, ok) {
+  const box = $('#game-state');
+  box.className = `backing-state${ok ? ' on' : ''}`;
+  box.textContent = message;
+}
+
+function renderCandidates(list) {
+  const box = $('#game-candidates');
+  state.gameCandidates = list;
+  if (!list.length) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  box.innerHTML = list.map((c, i) => `<button class="candidate" data-i="${i}">
+      <strong>${escapeHtml(c.path.split(/[\\/]/).filter(Boolean).pop() || c.path)}</strong>
+      <span class="cpath">${escapeHtml(c.path)}</span>
+      <span class="creasons">${escapeHtml(c.reasons.join(' · '))}${c.packs_voice ? '' : ' · packs_voice sera créé'}</span>
+    </button>`).join('');
+  $$('.candidate', box).forEach((btn) => btn.addEventListener('click', () => {
+    const c = list[Number(btn.dataset.i)];
+    $$('.candidate', box).forEach((b) => b.classList.toggle('sel', b === btn));
+    selectGameDir(c.path);
+  }));
+}
+
+async function selectGameDir(path) {
+  try {
+    const res = await api('/api/game/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    $('#game-path').value = res.game_dir;
+    state.settings.game_dir = res.game_dir;
+    setGameState(res.looks_like_game
+      ? `✓ Jeu reconnu : ${res.game_dir}`
+      : `⚠ Dossier accepté, mais il ne ressemble pas à une installation du jeu : ${res.game_dir}`,
+      res.looks_like_game);
+  } catch (err) {
+    setGameState(err.message, false);
+    toast(err.message, 'err');
+  }
+}
+
+function setupDestination() {
+  $$('input[name="dest"]').forEach((r) => r.addEventListener('change', () => {
+    refreshDestination();
+    saveSettings({ export_destination: currentDestination() });
+  }));
+
+  $('#btn-detect-game').addEventListener('click', async () => {
+    const btn = $('#btn-detect-game');
+    btn.disabled = true;
+    setGameState('Recherche du jeu sur cette machine…', false);
+    try {
+      const res = await api('/api/game/detect');
+      renderCandidates(res.candidates);
+      if (!res.candidates.length) {
+        setGameState("Jeu introuvable automatiquement. Utilise « Choisir le dossier… » — "
+          + 'astuce : dans le jeu, Modpack Guides → Dub Mode Packs → Open Folder.', false);
+      } else {
+        setGameState(`${res.candidates.length} installation(s) trouvée(s) — choisis la bonne.`, true);
+        if (res.candidates.length === 1) {
+          $$('.candidate')[0]?.classList.add('sel');
+          selectGameDir(res.candidates[0].path);
+        }
+      }
+    } catch (err) {
+      setGameState(err.message, false);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  const pick = async (title, initial) => {
+    const res = await api('/api/pick-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, initial }),
+    });
+    return res.path;
+  };
+
+  $('#btn-pick-game').addEventListener('click', async () => {
+    try {
+      const path = await pick('Dossier du jeu Choicer Voicer', $('#game-path').value);
+      if (path) { $('#game-path').value = path; await selectGameDir(path); }
+    } catch (err) { toast(err.message, 'err'); }
+  });
+
+  $('#btn-pick-folder').addEventListener('click', async () => {
+    try {
+      const path = await pick('Dossier de destination du pack', $('#folder-path').value);
+      if (path) {
+        $('#folder-path').value = path;
+        saveSettings({ export_folder: path });
+      }
+    } catch (err) { toast(err.message, 'err'); }
+  });
+
+  $('#game-path').addEventListener('change', () => {
+    const value = $('#game-path').value.trim();
+    if (value) selectGameDir(value);
+  });
+  $('#folder-path').addEventListener('change', () =>
+    saveSettings({ export_folder: $('#folder-path').value.trim() }));
+  $('#opt-makezip').addEventListener('change', () =>
+    saveSettings({ make_zip: $('#opt-makezip').checked }));
+}
+
+/* ------------------------------------------------------------------ init */
+(async function init() {
+  setupHome();
+  setupPlayer();
+  setupTimeline();
+  setupExport();
+  setupDestination();
+  await loadSettings();
+  try {
+    await loadCaps();
+  } catch (err) {
+    toast(`Serveur injoignable : ${err.message}`, 'err');
+  }
+  await loadProjects();
+  window.addEventListener('beforeunload', () => { if (state.saveTimer) save(); });
+})();

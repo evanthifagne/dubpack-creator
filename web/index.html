@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DubPack Creator — Choicer Voicer</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🎙️</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">🎙️</span>
+    <div>
+      <h1>DubPack Creator</h1>
+      <p class="brand-sub">Générateur de dub packs pour <strong>Choicer Voicer</strong></p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div id="caps" class="caps"></div>
+    <button id="btn-home" class="btn btn-ghost" hidden>← Mes projets</button>
+  </div>
+</header>
+
+<!-- ============================ ACCUEIL ============================ -->
+<main id="view-home" class="view">
+  <section class="panel hero">
+    <h2>1. Dépose ta vidéo</h2>
+    <div id="dropzone" class="dropzone">
+      <div class="dz-icon">🎬</div>
+      <p class="dz-title">Glisse un fichier MP4 ici</p>
+      <p class="dz-sub">ou <button id="btn-pick" class="link">choisis un fichier</button> — mp4, mkv, mov, webm, mp3…</p>
+      <input id="file-input" type="file" accept="video/*,audio/*" hidden>
+      <div class="dz-or"><span>ou</span></div>
+      <div class="url-row">
+        <input id="url-input" type="url" placeholder="Colle un lien YouTube (https://…)" spellcheck="false">
+      </div>
+      <p id="picked" class="picked" hidden></p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>2. Réglages de transcription</h2>
+    <div class="grid-settings">
+      <label>
+        <span>Modèle Whisper</span>
+        <select id="set-model"></select>
+        <small>Plus grand = plus précis, mais plus lent.</small>
+      </label>
+      <label>
+        <span>Langue</span>
+        <select id="set-language">
+          <option value="">Détection automatique</option>
+          <option value="fr">Français</option>
+          <option value="en">Anglais</option>
+          <option value="es">Espagnol</option>
+          <option value="de">Allemand</option>
+          <option value="it">Italien</option>
+          <option value="pt">Portugais</option>
+          <option value="ja">Japonais</option>
+          <option value="ko">Coréen</option>
+        </select>
+        <small>Forcer la langue évite les erreurs sur les clips courts.</small>
+      </label>
+      <label>
+        <span>Nombre de personnages</span>
+        <select id="set-speakers">
+          <option value="auto">Détection automatique</option>
+          <option value="1">1 voix</option>
+          <option value="2">2 voix</option>
+          <option value="3">3 voix</option>
+          <option value="4">4 voix</option>
+          <option value="5">5 voix</option>
+          <option value="6">6 voix</option>
+        </select>
+        <small>Laisse en auto si tu ne sais pas.</small>
+      </label>
+      <label>
+        <span>Longueur max d'une réplique</span>
+        <select id="set-maxline">
+          <option value="5">5 s — répliques très courtes</option>
+          <option value="9" selected>9 s — recommandé</option>
+          <option value="14">14 s — répliques longues</option>
+          <option value="25">25 s — monologues</option>
+        </select>
+        <small>Les répliques sont coupées aux silences et à la ponctuation.</small>
+      </label>
+    </div>
+    <div class="hero-actions">
+      <button id="btn-create" class="btn btn-primary btn-lg" disabled>Générer le dub pack</button>
+      <span id="create-hint" class="hint">Ajoute d'abord un fichier ou un lien.</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Mes projets</h2>
+    <div id="project-list" class="project-list"></div>
+  </section>
+</main>
+
+<!-- ============================ ÉDITEUR ============================ -->
+<main id="view-editor" class="view" hidden>
+  <div class="editor-grid">
+
+    <section class="panel player-panel">
+      <div class="video-wrap">
+        <video id="video" controls preload="metadata"></video>
+        <div id="subtitle-overlay" class="subtitle-overlay"></div>
+      </div>
+      <div class="transport">
+        <button id="btn-play" class="btn btn-ghost" title="Espace">▶︎</button>
+        <button id="btn-prev" class="btn btn-ghost" title="Réplique précédente">⏮</button>
+        <button id="btn-next" class="btn btn-ghost" title="Réplique suivante">⏭</button>
+        <span id="timecode" class="timecode">0:00.00 / 0:00.00</span>
+        <label class="loop-toggle"><input type="checkbox" id="chk-loop"> Boucler la réplique</label>
+        <span class="grow"></span>
+        <span id="stats" class="stats"></span>
+      </div>
+      <div id="timeline" class="timeline">
+        <canvas id="wave"></canvas>
+        <div id="tl-lines" class="tl-lines"></div>
+        <div id="playhead" class="playhead"></div>
+      </div>
+    </section>
+
+    <section class="panel lines-panel">
+      <div class="panel-head">
+        <h2>Répliques <span id="line-count" class="badge">0</span></h2>
+        <div class="panel-head-actions">
+          <input id="line-filter" type="search" placeholder="Filtrer…" spellcheck="false">
+          <button id="btn-add-line" class="btn btn-ghost" title="Ajouter une réplique à la position courante">+ Réplique</button>
+        </div>
+      </div>
+      <div id="lines" class="lines"></div>
+    </section>
+
+    <aside class="panel side-panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="chars">Personnages</button>
+        <button class="tab" data-tab="pack">Pack</button>
+        <button class="tab" data-tab="export">Export</button>
+      </div>
+
+      <div class="tab-body" data-body="chars">
+        <p class="muted small">Les voix ont été regroupées automatiquement. Renomme-les : le nom
+          part dans <code>dub_characters</code> et sert de filtre dans le jeu.</p>
+        <div id="characters"></div>
+        <div id="suggestions-box" hidden>
+          <h3>Noms repérés dans les dialogues</h3>
+          <div id="suggestions" class="chips"></div>
+        </div>
+        <div class="reanalyze">
+          <h3>Relancer l'analyse</h3>
+          <div class="grid-2">
+            <label><span>Modèle</span><select id="re-model"></select></label>
+            <label><span>Voix</span><select id="re-speakers">
+              <option value="auto">Auto</option><option value="1">1</option><option value="2">2</option>
+              <option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            </select></label>
+          </div>
+          <button id="btn-reanalyze" class="btn btn-ghost full">Retranscrire</button>
+          <small class="muted">Attention : cela remplace toutes les répliques (les noms de personnages sont conservés).</small>
+        </div>
+      </div>
+
+      <div class="tab-body" data-body="pack" hidden>
+        <label><span>Titre du pack</span><input id="pack-title" type="text"></label>
+        <label><span>Sous-titre</span><input id="pack-subtitle" type="text"></label>
+        <label><span>Auteur(s)</span><input id="pack-authors" type="text" placeholder="Séparés par des virgules"></label>
+        <label><span>Description</span><textarea id="pack-description" rows="4"></textarea></label>
+        <h3>Options d'export</h3>
+        <label class="check"><input type="checkbox" id="opt-normalize" checked>
+          <span>Normaliser le volume des clips <small>recommandé : le scoring du jeu n'aime pas les signaux faibles</small></span></label>
+        <label class="check"><input type="checkbox" id="opt-timestamp">
+          <span>Ajouter le timecode au nom des fichiers</span></label>
+        <label class="check"><input type="checkbox" id="opt-dubonly">
+          <span>Marquer les clips <code>dub_only</code> <small>ils n'apparaîtront qu'en mode Dub</small></span></label>
+        <label><span>Hauteur de la vidéo</span>
+          <select id="opt-height">
+            <option value="480">480p — pack léger</option>
+            <option value="720" selected>720p — recommandé</option>
+            <option value="1080">1080p — pack lourd</option>
+          </select></label>
+        <label><span>Qualité vidéo Theora</span>
+          <select id="opt-vq">
+            <option value="5">5 — légère</option>
+            <option value="7" selected>7 — équilibrée</option>
+            <option value="9">9 — haute</option>
+          </select></label>
+      </div>
+
+      <div class="tab-body" data-body="export" hidden>
+        <h3>Fond sonore</h3>
+        <p class="muted small">Le jeu peut jouer un <code>_backing_track.ogg</code> derrière ta voix :
+          musique et bruitages d'origine, sans les dialogues.</p>
+        <div id="backing-state" class="backing-state"></div>
+        <div class="btn-row">
+          <button id="btn-demucs" class="btn btn-ghost">Séparer les voix (Demucs)</button>
+          <button id="btn-backing-orig" class="btn btn-ghost">Utiliser l'audio d'origine</button>
+        </div>
+
+        <h3>Vérification</h3>
+        <div id="issues" class="issues"></div>
+
+        <h3>Destination</h3>
+        <div class="dest-group">
+          <label class="dest"><input type="radio" name="dest" value="game" checked>
+            <span><strong>Directement dans le jeu</strong>
+              <small>dépose le pack dans <code>packs_voice</code> — prêt à jouer</small></span></label>
+
+          <div class="dest-body" data-dest="game">
+            <div id="game-state" class="backing-state">Dossier du jeu non détecté.</div>
+            <div class="btn-row">
+              <button id="btn-detect-game" class="btn btn-ghost">Détecter le jeu</button>
+              <button id="btn-pick-game" class="btn btn-ghost">Choisir le dossier…</button>
+            </div>
+            <div id="game-candidates" class="candidates" hidden></div>
+            <label class="path-label"><span>Chemin du jeu</span>
+              <input id="game-path" type="text" placeholder="C:\...\The Choicer Voicer" spellcheck="false"></label>
+          </div>
+
+          <label class="dest"><input type="radio" name="dest" value="folder">
+            <span><strong>Dans un dossier de mon choix</strong>
+              <small>par exemple le Bureau, pour l'installer ou le partager après</small></span></label>
+          <div class="dest-body" data-dest="folder" hidden>
+            <div class="btn-row">
+              <button id="btn-pick-folder" class="btn btn-ghost">Choisir le dossier…</button>
+            </div>
+            <label class="path-label"><span>Dossier de destination</span>
+              <input id="folder-path" type="text" placeholder="Colle un chemin ou clique sur Choisir" spellcheck="false"></label>
+          </div>
+
+          <label class="dest"><input type="radio" name="dest" value="zip">
+            <span><strong>ZIP à télécharger</strong>
+              <small>reste dans le dossier de l'outil, à installer à la main</small></span></label>
+        </div>
+
+        <label class="check"><input type="checkbox" id="opt-overwrite">
+          <span>Remplacer un pack du même nom déjà présent</span></label>
+        <label class="check" id="zip-too-row" hidden><input type="checkbox" id="opt-makezip">
+          <span>Créer aussi un ZIP <small>pratique pour partager le pack</small></span></label>
+
+        <h3>Export</h3>
+        <button id="btn-export" class="btn btn-primary full">Exporter le dub pack</button>
+        <div id="export-result" class="export-result" hidden></div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<!-- ============================ OVERLAYS ============================ -->
+<div id="job-overlay" class="overlay" hidden>
+  <div class="job-card">
+    <h2 id="job-title">Traitement…</h2>
+    <div class="progress"><div id="job-bar" class="progress-bar"></div></div>
+    <p id="job-label" class="job-label"></p>
+    <div id="job-steps" class="job-steps"></div>
+    <button id="btn-cancel-job" class="btn btn-ghost">Annuler</button>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<template id="tpl-line">
+  <article class="line" tabindex="0">
+    <div class="line-bar"></div>
+    <div class="line-main">
+      <div class="line-top">
+        <button class="line-play" title="Écouter la réplique">▶</button>
+        <span class="line-index"></span>
+        <select class="line-speaker"></select>
+        <input class="line-start time" type="text" inputmode="decimal" title="Début (s)">
+        <span class="dash">→</span>
+        <input class="line-end time" type="text" inputmode="decimal" title="Fin (s)">
+        <span class="line-dur"></span>
+        <span class="grow"></span>
+        <button class="line-btn line-split" title="Couper au curseur">✂</button>
+        <button class="line-btn line-merge" title="Fusionner avec la suivante">⤵</button>
+        <label class="line-enabled" title="Inclure dans l'export"><input type="checkbox" checked></label>
+        <button class="line-btn line-del" title="Supprimer">🗑</button>
+      </div>
+      <textarea class="line-text" rows="2" placeholder="Sous-titre affiché dans le jeu…"></textarea>
+    </div>
+  </article>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

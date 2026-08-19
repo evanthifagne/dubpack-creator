@@ -1,0 +1,5 @@
+# Modules facultatifs, installables depuis l'onglet Diagnostic de l'appli.
+# Séparation voix / fond sonore (gros téléchargement: PyTorch)
+demucs>=4.0.1
+# Empreintes vocales de meilleure qualité pour la détection des personnages
+speechbrain>=1.0.0

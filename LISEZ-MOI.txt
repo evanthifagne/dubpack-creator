@@ -1,0 +1,69 @@
+========================================================
+ DubPack Creator - Choicer Voicer
+ Creation de dub packs a partir d'une video
+========================================================
+
+DEMARRAGE RAPIDE (Windows)
+
+  1. Double-clique sur INSTALLER.bat
+     -> une seule fois, 5 a 15 minutes.
+     -> si Python manque, le script t'explique quoi faire.
+
+  2. Double-clique sur DEMARRER.bat
+     -> le navigateur s'ouvre sur l'outil.
+     -> garde la fenetre noire ouverte pendant l'utilisation.
+
+  3. Depose un fichier MP4 ou colle un lien YouTube,
+     clique sur "Generer le dub pack", et attends.
+
+  4. Corrige les repliques et les noms de personnages,
+     puis onglet Export.
+
+  5. Choisis la destination :
+       - "Directement dans le jeu" : clique "Detecter le jeu",
+         l'outil trouve ton installation et depose le pack
+         dans packs_voice. C'est pret a jouer.
+       - "Dans un dossier de mon choix" : pour l'installer
+         ou le partager plus tard.
+       - "ZIP a telecharger" : archive classique.
+
+--------------------------------------------------------
+SI LE JEU N'EST PAS TROUVE AUTOMATIQUEMENT
+
+  Dans Choicer Voicer : menu principal -> Modpack Guides
+  -> Dub Mode Packs -> Open Folder.
+  Copie le chemin de la barre d'adresse de l'Explorateur
+  et colle-le dans le champ "Chemin du jeu".
+
+--------------------------------------------------------
+TOUT SE PASSE SUR TON PC
+
+  La transcription tourne en local (Whisper). Rien n'est
+  envoye a un service externe. Seuls le modele (au premier
+  lancement) et la video (si tu donnes un lien) sont
+  telecharges.
+
+  Premiere transcription : le modele fait ~500 Mo.
+  Les suivantes sont immediates.
+
+--------------------------------------------------------
+PROBLEMES COURANTS
+
+  "Python n'est pas installe"
+      Installe-le depuis python.org en cochant
+      "Add python.exe to PATH", puis relance INSTALLER.bat.
+
+  Badge "Theora" rouge dans l'outil
+      ffmpeg est incomplet. Relance :
+      INSTALLER.bat
+
+  Transcription lente
+      Normal sur un PC sans carte graphique dediee.
+      Commence par le modele "base" pour degrossir.
+
+  Le pack n'apparait pas dans le jeu
+      Verifie qu'il n'y a pas de dossier en trop :
+      packs_voice\Mon Pack\dub_video.ogv doit exister.
+
+--------------------------------------------------------
+Documentation complete : README.md

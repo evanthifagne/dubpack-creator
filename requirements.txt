@@ -1,0 +1,15 @@
+# --- Serveur web local ------------------------------------------------
+fastapi>=0.115
+uvicorn>=0.34
+python-multipart>=0.0.20
+
+# --- Récupération des médias -----------------------------------------
+yt-dlp>=2025.1.15
+imageio-ffmpeg>=0.5              # binaire ffmpeg de secours si absent du PATH
+
+# --- Transcription locale (aucun cloud) ------------------------------
+faster-whisper>=1.1.0            # Whisper via CTranslate2: rapide en CPU, Windows + macOS
+
+# --- Regroupement des voix (détection des personnages) ---------------
+numpy>=1.26
+scipy>=1.11

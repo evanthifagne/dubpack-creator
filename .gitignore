@@ -1,0 +1,20 @@
+# Environnement et caches
+.venv/
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+
+# Données locales de l'utilisateur
+projects/
+settings.json
+
+# Binaires téléchargés (ffmpeg) et paquets construits
+bin/*
+!bin/.gitkeep
+dist/
+
+# Systèmes de fichiers
+.DS_Store
+Thumbs.db
+desktop.ini
