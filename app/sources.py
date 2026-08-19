@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
+from . import cancel
 from .config import VIDEO_EXTS, AUDIO_EXTS, configure_environment, ffmpeg_dir
 
 ProgressCb = Callable[[float, str], None] | None
@@ -97,6 +98,8 @@ def download_url(url: str, dest_dir: Path, cb: ProgressCb = None,
         raise RuntimeError("yt-dlp n'est pas installé (pip install yt-dlp).") from exc
 
     def hook(status: dict) -> None:
+        # Point de controle de l'annulation: yt-dlp appelle ce hook regulierement.
+        cancel.check()
         if not cb:
             return
         if status.get("status") == "downloading":
@@ -145,7 +148,11 @@ def download_url(url: str, dest_dir: Path, cb: ProgressCb = None,
                 break
             attempts.append(f"{label}: aucun fichier produit")
             info = None
+        except cancel.Cancelled:
+            raise
         except Exception as exc:
+            if cancel.is_cancelled():
+                raise cancel.Cancelled() from exc
             message = _clean(str(exc))
             attempts.append(f"{label}: {message}")
             # Une vidéo privée ou supprimée ne s'obtiendra par aucune ruse.

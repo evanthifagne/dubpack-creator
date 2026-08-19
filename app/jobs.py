@@ -10,6 +10,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from . import cancel
+
 
 # yt-dlp et ffmpeg colorent leur sortie: ces codes salissent l'interface.
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\[[0-9];[0-9]{2}m")
@@ -34,6 +36,8 @@ class Job:
     created_at: float = field(default_factory=time.time)
     started_at: float | None = None
     ended_at: float | None = None
+    cancel_requested_at: float | None = None
+    killed_processes: int = 0
     steps: list[dict] = field(default_factory=list)
     _target: Callable | None = field(default=None, repr=False)
     _cancel: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -52,6 +56,12 @@ class Job:
             "result": self.result, "error": self.error,
             "position": self.position, "elapsed": round(self.elapsed, 1),
             "active": self.status in {"queued", "running"},
+            "cancelling": self.cancel_requested_at is not None
+                          and self.status in {"queued", "running"},
+            "cancel_elapsed": (round(time.time() - self.cancel_requested_at, 1)
+                               if self.cancel_requested_at else None),
+            "killed_processes": self.killed_processes,
+            "processes": cancel.active_processes(self.id),
             "steps": self.steps[-40:],
         }
 
@@ -118,11 +128,18 @@ class JobManager:
                 job.label = ("Prochaine à démarrer" if index == 1
                              else f"En attente — {index - 1} tâche(s) devant")
 
-    def cancel(self, job_id: str) -> bool:
+    def cancel(self, job_id: str, force: bool = False) -> bool:
+        """Demande l'arrêt. `force` interrompt aussi les processus en cours.
+
+        Sans cela, une tâche bloquée dans un encodage ffmpeg ne verrait la
+        demande qu'à la fin de celui-ci: plusieurs minutes d'attente pour rien.
+        """
         job = self.get(job_id)
         if not job or job.status not in {"queued", "running"}:
             return False
         job._cancel.set()
+        if job.cancel_requested_at is None:
+            job.cancel_requested_at = time.time()
         if job.status == "queued":
             # Pas encore demarre: on le retire proprement de la file.
             with self._lock:
@@ -133,7 +150,12 @@ class JobManager:
                 job.ended_at = time.time()
                 self._renumber()
             return True
-        job.label = "Annulation demandée…"
+        # On coupe les processus externes: c'est ce qui rend l'annulation
+        # immediate au lieu d'attendre la fin de l'etape en cours.
+        stopped = cancel.stop_processes(job.id)
+        job.killed_processes += stopped
+        job.label = ("Annulation… arrêt des processus en cours"
+                     if stopped else "Annulation… fin de l'étape en cours")
         return True
 
     def run(self, job: Job, target: Callable[[Job, Callable[[float, str], None]], Any]) -> Job:
@@ -165,7 +187,16 @@ class JobManager:
             job = self._jobs.get(job_id)
             if job is None or job.status != "queued" or job._cancel.is_set():
                 continue
-            self._execute(job)
+            try:
+                self._execute(job)
+            except BaseException:  # noqa: BLE001
+                # Dernier filet: si l'ouvrier mourait, toute la file resterait
+                # bloquee et les taches suivantes ne demarreraient jamais.
+                traceback.print_exc()
+                if job.status == "running":
+                    job.status = "error"
+                    job.error = "Interruption inattendue de la tâche"
+                    job.ended_at = time.time()
 
     def _execute(self, job: Job) -> None:
         def progress(frac: float, label: str = "") -> None:
@@ -180,28 +211,35 @@ class JobManager:
         job.started_at = time.time()
         job.position = 0
         job.label = ""
+        cancel.bind(job.id, job._cancel)
         try:
             job.result = job._target(job, progress)  # type: ignore[misc]
             job.status = "done"
             job.progress = 1.0
             job.label = job.label or "Terminé"
-        except JobCancelled:
+        except cancel.Cancelled:
             job.status = "cancelled"
             job.label = "Annulé"
-        except Exception as exc:
-            job.status = "error"
-            job.error = clean_message(str(exc)) or exc.__class__.__name__
-            job.label = "Erreur"
-            traceback.print_exc()
+        except BaseException as exc:  # noqa: BLE001 - aucune tâche ne doit tuer l'ouvrier
+            if job._cancel.is_set():
+                # Tuer ffmpeg fait echouer l'appel: c'est une annulation, pas un bug.
+                job.status = "cancelled"
+                job.label = "Annulé"
+            else:
+                job.status = "error"
+                job.error = clean_message(str(exc)) or exc.__class__.__name__
+                job.label = "Erreur"
+                traceback.print_exc()
         finally:
+            cancel.unbind()
             job.ended_at = time.time()
             job._target = None
             with self._lock:
                 self._renumber()
 
 
-class JobCancelled(Exception):
-    pass
+class JobCancelled(cancel.Cancelled):
+    """Conservé pour compatibilité: même sens que `cancel.Cancelled`."""
 
 
 manager = JobManager()

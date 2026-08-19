@@ -125,8 +125,10 @@ def _transcribe_faster_whisper(audio: Path, model_name: str, language: str | Non
             start=float(seg.start), end=float(seg.end), text=(seg.text or "").strip(),
             words=words, confidence=float(getattr(seg, "avg_logprob", 0.0) or 0.0),
         ))
-        if cb and total:
-            cb(min(float(seg.end) / total, 0.99), "Transcription en cours")
+        # Appel systematique: c'est aussi notre point de controle d'annulation.
+        if cb:
+            fraction = min(float(seg.end) / total, 0.99) if total else 0.5
+            cb(fraction, "Transcription en cours")
     return lines, (getattr(info, "language", None) or language or "")
 
 

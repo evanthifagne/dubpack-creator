@@ -12,7 +12,7 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFil
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import asr, dubpack, gamedir, media, picker, pipeline, separate, sources
+from . import asr, cancel, dubpack, gamedir, media, picker, pipeline, separate, sources
 from .config import module_available
 from .config import (DEFAULT_MODEL, PROJECTS_DIR, ROOT, WEB_DIR, capabilities,
                      configure_environment, diagnose, reset_tool_cache)
@@ -618,7 +618,25 @@ def api_job(job_id: str) -> dict:
 
 @app.post("/api/jobs/{job_id}/cancel")
 def api_cancel(job_id: str) -> dict:
-    return {"cancelled": manager.cancel(job_id)}
+    ok = manager.cancel(job_id)
+    job = manager.get(job_id)
+    return {"cancelled": ok, "job": job.to_dict() if job else None}
+
+
+@app.post("/api/jobs/{job_id}/kill")
+def api_kill(job_id: str) -> dict:
+    """Force l'arret: reinterrompt les processus encore vivants.
+
+    Utile si la premiere demande n'a pas suffi, par exemple quand un nouveau
+    processus avait demarre juste apres.
+    """
+    job = manager.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Tache inconnue.")
+    manager.cancel(job_id)
+    stopped = cancel.stop_processes(job_id, grace=1.0)
+    job.killed_processes += stopped
+    return {"stopped": stopped, "job": job.to_dict()}
 
 
 @app.exception_handler(RuntimeError)

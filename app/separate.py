@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from . import media
+from . import cancel, media
 from .config import CACHE_DIR, module_available
 
 ProgressCb = Callable[[float, str], None] | None
@@ -48,18 +48,24 @@ def separate_backing(source: Path, out_dir: Path, cb: ProgressCb = None,
     env = {"TORCH_HOME": str(CACHE_DIR / "models" / "torch")}
     import os
 
-    proc = subprocess.Popen(
+    proc = cancel.register(subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, errors="replace", env={**os.environ, **env},
         **({"creationflags": 0x08000000} if os.name == "nt" else {}),
-    )
+    ))
     assert proc.stdout is not None
-    for line in proc.stdout:
-        match = _PCT.search(line)
-        if match and cb:
-            cb(0.05 + 0.85 * min(int(match.group(1)), 100) / 100, "Séparation des voix (Demucs)")
-    proc.wait()
+    try:
+        for line in proc.stdout:
+            match = _PCT.search(line)
+            if match and cb:
+                cb(0.05 + 0.85 * min(int(match.group(1)), 100) / 100,
+                   "Séparation des voix (Demucs)")
+        proc.wait()
+    finally:
+        cancel.unregister(proc)
     if proc.returncode != 0:
+        if cancel.is_cancelled():
+            raise media.CancelledOperation()
         raise RuntimeError("Demucs a échoué. Vérifie l'installation de PyTorch.")
 
     stems = list(work.rglob("no_vocals.*"))

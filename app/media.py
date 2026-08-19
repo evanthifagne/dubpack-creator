@@ -9,6 +9,7 @@ from typing import Callable, Iterable
 
 import numpy as np
 
+from . import cancel
 from .config import ffmpeg_path, ffprobe_path, has_encoder
 
 ProgressCb = Callable[[float, str], None] | None
@@ -26,14 +27,28 @@ def _popen_kwargs() -> dict:
 
 
 def run(cmd: list[str], timeout: int | None = None) -> subprocess.CompletedProcess:
-    proc = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=timeout,
-        errors="replace", **_popen_kwargs(),
-    )
+    """Lance une commande en la déclarant annulable."""
+    proc = cancel.register(subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, errors="replace", **_popen_kwargs(),
+    ))
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    finally:
+        cancel.unregister(proc)
     if proc.returncode != 0:
-        tail = (proc.stderr or "").strip().splitlines()[-12:]
+        if cancel.is_cancelled():
+            raise CancelledOperation()
+        tail = (err or "").strip().splitlines()[-12:]
         raise RuntimeError(f"Échec de la commande {Path(cmd[0]).name}:\n" + "\n".join(tail))
-    return proc
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
+class CancelledOperation(cancel.Cancelled):
+    """Le processus a été interrompu par une demande d'annulation."""
+
+    def __init__(self) -> None:
+        super().__init__("Opération interrompue")
 
 
 _DUR_RE = re.compile(r"Duration:\s*(\d+):(\d\d):(\d\d\.\d+)")
@@ -101,20 +116,25 @@ def probe(path: str | Path) -> dict:
 def _run_with_progress(cmd: list[str], total: float, cb: ProgressCb, label: str) -> None:
     """Lance ffmpeg en lisant -progress pour remonter l'avancement."""
     full = [cmd[0], "-hide_banner", "-nostdin", "-progress", "pipe:1", "-nostats", *cmd[1:]]
-    proc = subprocess.Popen(
+    proc = cancel.register(subprocess.Popen(
         full, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, errors="replace", **_popen_kwargs(),
-    )
+    ))
     assert proc.stdout is not None
-    for line in proc.stdout:
-        if cb and total > 0 and line.startswith("out_time_ms="):
-            try:
-                done = int(line.split("=", 1)[1]) / 1_000_000.0
-            except ValueError:
-                continue
-            cb(min(done / total, 1.0), label)
-    proc.wait()
+    try:
+        for line in proc.stdout:
+            if cb and total > 0 and line.startswith("out_time_ms="):
+                try:
+                    done = int(line.split("=", 1)[1]) / 1_000_000.0
+                except ValueError:
+                    continue
+                cb(min(done / total, 1.0), label)
+        proc.wait()
+    finally:
+        cancel.unregister(proc)
     if proc.returncode != 0:
+        if cancel.is_cancelled():
+            raise CancelledOperation()
         tail = (proc.stderr.read() if proc.stderr else "").strip().splitlines()[-12:]
         raise RuntimeError(f"Échec ffmpeg ({label}):\n" + "\n".join(tail))
     if cb:
@@ -138,14 +158,20 @@ def extract_audio(src: str | Path, dst: str | Path, sr: int = 16000, mono: bool 
 
 def read_pcm(path: str | Path, sr: int = 16000) -> np.ndarray:
     """Décode n'importe quel média en float32 mono normalisé, via un pipe ffmpeg."""
-    proc = subprocess.run(
+    proc = cancel.register(subprocess.Popen(
         [ffmpeg_path(), "-hide_banner", "-nostdin", "-v", "error", "-i", str(path),
          "-vn", "-ac", "1", "-ar", str(sr), "-f", "f32le", "pipe:1"],
-        capture_output=True, **_popen_kwargs(),
-    )
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, **_popen_kwargs(),
+    ))
+    try:
+        out, err = proc.communicate()
+    finally:
+        cancel.unregister(proc)
     if proc.returncode != 0:
-        raise RuntimeError((proc.stderr or b"").decode("utf-8", "replace")[-500:])
-    return np.frombuffer(proc.stdout, dtype=np.float32)
+        if cancel.is_cancelled():
+            raise CancelledOperation()
+        raise RuntimeError((err or b"").decode("utf-8", "replace")[-500:])
+    return np.frombuffer(out, dtype=np.float32)
 
 
 def cut_audio(src: str | Path, dst: str | Path, start: float, end: float,

@@ -116,6 +116,8 @@ textarea { resize: vertical; }
 .btn-primary { background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: #c2570d; color: #1a0f03; }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.08); background: linear-gradient(180deg, var(--accent-2), var(--accent)); }
 .btn-ghost { background: transparent; }
+.btn-danger { border-color: rgba(248, 113, 113, .5); color: #fecaca; }
+.btn-danger:hover:not(:disabled) { border-color: var(--err); background: rgba(248, 113, 113, .12); }
 .btn-lg { padding: 11px 22px; font-size: 15px; }
 .btn.full { width: 100%; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }

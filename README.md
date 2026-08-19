@@ -125,6 +125,12 @@ tâche en attente indique son rang, et peut être annulée avant démarrage.
 Si tu rafraîchis ou rouvres la page, le suivi se reprend tout seul : les tâches
 vivent dans le serveur, pas dans le navigateur.
 
+**Annuler** interrompt les programmes en cours (ffmpeg, yt-dlp, Demucs) au lieu
+d'attendre poliment la fin de l'étape : compte deux à trois secondes. La fenêtre
+indique ce qui reste à arrêter, et un second appui force la coupure. Seule
+exception honnête : le téléchargement d'un modèle ne peut pas être interrompu en
+cours de route — la fenêtre le dit explicitement.
+
 ## 4. Où atterrit le pack (onglet Export)
 
 Trois destinations, au choix :

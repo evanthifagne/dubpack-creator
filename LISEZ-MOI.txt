@@ -63,6 +63,11 @@ PENDANT QUE CA TRAVAILLE
   Tu peux fermer l'onglet ou rafraichir la page : les
   taches continuent, le suivi reprend tout seul.
 
+  ANNULER coupe pour de bon les programmes en cours
+  (ffmpeg, yt-dlp) : compte 2 a 3 secondes. La fenetre
+  dit ce qui reste a arreter, et un second appui force
+  la coupure.
+
 --------------------------------------------------------
 SI QUELQUE CHOSE NE MARCHE PAS
 

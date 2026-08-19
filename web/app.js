@@ -251,6 +251,16 @@ function showJobWindow(jobId) {
   $('#job-title').textContent = entry.title;
   $('#job-overlay').hidden = false;
   $('#btn-cancel-job').onclick = async () => {
+    const entry = state.jobs.get(jobId);
+    if (entry?.snapshot?.cancelling) {
+      // Deja demande: cette fois on force.
+      await api(`/api/jobs/${jobId}/kill`, { method: 'POST' })
+        .then((r) => toast(r.stopped
+          ? `${r.stopped} processus interrompu(s).`
+          : "Aucun processus externe à interrompre : l'étape en cours doit finir."))
+        .catch((e) => toast(e.message, 'err'));
+      return;
+    }
     if (!confirm('Annuler cette tâche ?')) return;
     await api(`/api/jobs/${jobId}/cancel`, { method: 'POST' }).catch(() => {});
   };
@@ -373,6 +383,11 @@ function renderJobWindow() {
   if (!entry) { hideJobWindow(); return; }
   const job = entry.snapshot || {};
   const queued = job.status === 'queued';
+  const cancelling = !!job.cancelling;
+
+  const cancelBtn = $('#btn-cancel-job');
+  cancelBtn.textContent = cancelling ? 'Forcer l\'arrêt' : 'Annuler la tâche';
+  cancelBtn.classList.toggle('btn-danger', cancelling);
   const elapsed = (Date.now() - entry.started) / 1000;
   const stalled = (Date.now() - entry.lastMove) / 1000 > 6;
 
@@ -392,11 +407,27 @@ function renderJobWindow() {
   $('#job-time').textContent = time;
 
   $('#job-label').textContent = job.label || '…';
-  const note = noteFor(job, elapsed);
+  const note = cancelling ? cancelNote(job) : noteFor(job, elapsed);
   $('#job-note').hidden = !note;
   if (note) $('#job-note').textContent = note;
   $('#job-steps').innerHTML = (job.steps || []).slice(-8)
     .map((s) => `<div>${escapeHtml(s.label)}</div>`).join('');
+}
+
+function cancelNote(job) {
+  /* Dire precisement pourquoi l'arret peut prendre un instant, et ou ca en est. */
+  const since = job.cancel_elapsed ? ` (demandé il y a ${clock(job.cancel_elapsed)})` : '';
+  if (job.processes > 0) {
+    return `Arrêt en cours${since} : ${job.processes} processus externe(s) encore `
+      + 'actif(s). Clique « Forcer l\'arrêt » pour les couper immédiatement.';
+  }
+  if (job.killed_processes > 0) {
+    return `Processus interrompus${since}. La tâche se termine, plus que le `
+      + 'nettoyage.';
+  }
+  return `Arrêt demandé${since}. Aucun processus externe à couper : l'étape en `
+    + 'cours doit se terminer d\'elle-même. Le téléchargement d\'un modèle, en '
+    + 'particulier, ne peut pas être interrompu en cours de route.';
 }
 
 function renderDock() {
@@ -414,7 +445,8 @@ function renderDock() {
     const stalled = (Date.now() - entry.lastMove) / 1000 > 6;
     const waiting = queued || (stalled && entry.lastProgress < 0.995);
     const eta = queued ? null : estimateRemaining(entry);
-    const right = queued ? 'en attente'
+    const right = job.cancelling ? 'annulation…'
+      : queued ? 'en attente'
       : `${Math.round((job.progress || 0) * 100)} %`;
     const time = eta !== null ? `${clock(elapsed)} · ~${clock(eta)} restant`
       : `${clock(elapsed)}`;
