@@ -123,7 +123,7 @@ function refreshModelState() {
     return;
   }
   el.innerHTML = model.cached
-    ? `<span style="color:var(--ok)">✓ déjà téléchargé (${escapeHtml(model.size_label)})</span> — ${escapeHtml(model.note)}`
+    ? `<span style="color:var(--ok)">déjà téléchargé (${escapeHtml(model.size_label)})</span> — ${escapeHtml(model.note)}`
     : `<span style="color:var(--warn)">à télécharger : ${escapeHtml(model.expected)}</span> au premier usage — ${escapeHtml(model.note)}`;
 }
 
@@ -187,6 +187,7 @@ function settingsFromForm() {
     language: $('#set-language').value,
     speakers: $('#set-speakers').value,
     max_line: num($('#set-maxline').value, 9),
+    detect_sounds: $('#set-sounds').checked,
   };
 }
 
@@ -236,7 +237,7 @@ function pickFile(file) {
   state.pendingFile = file;
   $('#url-input').value = '';
   const mb = (file.size / 1048576).toFixed(1);
-  $('#picked').textContent = `✓ ${file.name} (${mb} Mo)`;
+  $('#picked').textContent = `${file.name} (${mb} Mo)`;
   $('#picked').hidden = false;
   refreshCreateButton();
 }
@@ -291,7 +292,7 @@ async function loadProjects() {
         <h3>${escapeHtml(p.name)}</h3>
         <p>${p.lines} répliques · ${escapeHtml(chars)}</p>
       </div>
-      <button class="pc-del" title="Supprimer">🗑</button>`;
+      <button class="pc-del" title="Supprimer">${icon('trash')}</button>`;
     card.addEventListener('click', (e) => {
       if (e.target.closest('.pc-del')) return;
       openProject(p.id);
@@ -305,6 +306,10 @@ async function loadProjects() {
     box.append(card);
   }
 }
+
+/* Icones Tabler, servies par le sprite inline: pas d'emoji dans l'interface. */
+const icon = (name, cls = 'ic') =>
+  `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -549,7 +554,7 @@ function renderJobWindow() {
   $('#job-note').hidden = !note;
   if (note) $('#job-note').textContent = note;
   $('#job-steps').innerHTML = (job.steps || []).slice(-8)
-    .map((s) => `<div>${escapeHtml(s.label)}</div>`).join('');
+    .map((s) => `<div>${icon('check', 'ic-sm')}${escapeHtml(s.label)}</div>`).join('');
 }
 
 function cancelNote(job) {
@@ -733,8 +738,8 @@ function renderCharacters() {
         ? `<img class="char-portrait" src="/api/projects/${state.project.id}/character-image/${encodeURIComponent(c.id)}?t=${stamp}" alt="">`
         : ''}
       <input type="text" value="${escapeHtml(c.name)}" placeholder="Nom du personnage">
-      <button class="line-btn char-shot" title="Utiliser l'image actuelle de la vidéo comme portrait">📷</button>
-      ${c.image ? '<button class="line-btn char-shot-del" title="Retirer le portrait">✕</button>' : ''}
+      <button class="line-btn char-shot" title="Utiliser l'image actuelle de la vidéo comme portrait">${icon('camera')}</button>
+      ${c.image ? `<button class="line-btn char-shot-del" title="Retirer le portrait">${icon('close')}</button>` : ''}
       <span class="char-count">${counts[c.id] || 0} rép.</span>`;
     const input = $('input', row);
     input.addEventListener('input', () => {
@@ -783,7 +788,11 @@ function renderLines() {
   sortLines();
   const filter = state.filter.toLowerCase();
   const all = lines();
+  const sounds = all.filter((l) => l.nonverbal).length;
   $('#line-count').textContent = all.length;
+  $('#sound-count').hidden = !sounds;
+  $('#sound-count').textContent = `dont ${sounds} son${sounds > 1 ? 's' : ''}`;
+  $('#btn-drop-sounds').hidden = !sounds;
 
   all.forEach((line, index) => {
     if (filter && !(line.text || '').toLowerCase().includes(filter)
@@ -793,6 +802,15 @@ function renderLines() {
     node.dataset.id = line.id;
     $('.line-bar', node).style.background = colorOf(line.speaker);
     $('.line-index', node).textContent = index + 1;
+    if (line.nonverbal) {
+      // Un cri ou un impact se repere d'un coup d'oeil: ce n'est pas du texte.
+      node.classList.add('nonverbal');
+      const badge = document.createElement('span');
+      badge.className = 'nv-badge';
+      badge.textContent = line.kind || 'son';
+      badge.title = 'Son non parlé détecté — modifie ou supprime si besoin';
+      $('.line-index', node).after(badge);
+    }
 
     const sel = $('.line-speaker', node);
     sel.innerHTML = chars().map((c) =>
@@ -959,13 +977,16 @@ function renderTimeline() {
   if (!dur) return;
   for (const line of lines()) {
     const el = document.createElement('div');
-    el.className = `tl-line${line.enabled === false ? ' off' : ''}${line.id === state.selected ? ' sel' : ''}`;
+    el.className = `tl-line${line.enabled === false ? ' off' : ''}`
+      + `${line.id === state.selected ? ' sel' : ''}${line.nonverbal ? ' nv' : ''}`;
     el.dataset.id = line.id;
     el.style.left = `${(line.start / dur) * 100}%`;
     el.style.width = `${Math.max(((line.end - line.start) / dur) * 100, 0.35)}%`;
     el.style.background = colorOf(line.speaker);
-    el.title = `${nameOf(line.speaker)} — ${line.text || ''}`;
-    el.textContent = nameOf(line.speaker);
+    el.title = line.nonverbal
+      ? `Son non parlé (${line.kind || 'son'}) — ${nameOf(line.speaker)}`
+      : `${nameOf(line.speaker)} — ${line.text || ''}`;
+    el.textContent = line.nonverbal ? (line.kind || 'son') : nameOf(line.speaker);
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       selectLine(line.id, true);
@@ -993,8 +1014,8 @@ function setupPlayer() {
   $('#btn-play').addEventListener('click', () => (video.paused ? video.play() : video.pause()));
   $('#btn-prev').addEventListener('click', () => jumpLine(-1));
   $('#btn-next').addEventListener('click', () => jumpLine(1));
-  video.addEventListener('play', () => { $('#btn-play').textContent = '❚❚'; });
-  video.addEventListener('pause', () => { $('#btn-play').textContent = '▶︎'; });
+  video.addEventListener('play', () => { $('#btn-play').innerHTML = icon('pause'); });
+  video.addEventListener('pause', () => { $('#btn-play').innerHTML = icon('play'); });
 
   video.addEventListener('timeupdate', () => {
     const dur = state.project?.source?.duration || video.duration || 0;
@@ -1063,7 +1084,7 @@ function refreshBacking() {
   if (assets.backing_track) {
     const mode = assets.backing_mode === 'demucs' ? 'voix séparées (Demucs)' : 'audio d\'origine';
     box.className = 'backing-state on';
-    box.innerHTML = `✓ <code>_backing_track.ogg</code> prêt — ${mode}. <button class="link" id="btn-drop-backing">retirer</button>`;
+    box.innerHTML = `${icon('ok', 'ic-sm')} <code>_backing_track.ogg</code> prêt — ${mode}. <button class="link" id="btn-drop-backing">retirer</button>`;
     $('#btn-drop-backing').addEventListener('click', async () => {
       await api(`/api/projects/${state.project.id}/backing`, { method: 'DELETE' });
       state.project.assets.backing_track = null;
@@ -1166,6 +1187,13 @@ function setupExport() {
     renderLines();
   });
   $('#btn-add-line').addEventListener('click', addLine);
+  $('#btn-drop-sounds').addEventListener('click', () => {
+    const sounds = lines().filter((l) => l.nonverbal);
+    if (!sounds.length) { toast('Aucun son non parlé dans ce pack.'); return; }
+    if (!confirm(`Supprimer les ${sounds.length} son(s) non parlé(s) détecté(s) ?`)) return;
+    state.project.lines = lines().filter((l) => !l.nonverbal);
+    renderLines(); renderTimeline(); renderCharacters(); validate(); scheduleSave();
+  });
 }
 
 async function runBacking(mode) {
@@ -1337,9 +1365,11 @@ async function renderRecentJobs() {
     box.textContent = 'Aucune tâche pour le moment.';
     return;
   }
-  const marks = { done: '✓', error: '✕', cancelled: '⊘', running: '…', queued: '·' };
+  const marks = { done: icon('ok', 'ic-sm'), error: icon('warning', 'ic-sm'),
+    cancelled: icon('close', 'ic-sm'), running: icon('clock', 'ic-sm'),
+    queued: icon('clock', 'ic-sm') };
   box.innerHTML = jobs.map((j, i) => `<div class="diag-row">
-      <span class="diag-key">${marks[j.status] || '·'} ${escapeHtml(j.title || j.kind)}</span>
+      <span class="diag-key">${marks[j.status] || ''} ${escapeHtml(j.title || j.kind)}</span>
       <span class="diag-val ${j.status === 'error' ? 'no' : j.status === 'done' ? 'ok' : ''}">
         ${escapeHtml(j.status === 'error' ? (j.error || 'échec') : j.status)}
         ${j.status === 'error' && j.error_detail
@@ -1424,7 +1454,7 @@ async function loadSettings() {
   const s = state.settings;
   if (s.game_dir) {
     $('#game-path').value = s.game_dir;
-    setGameState(`✓ Jeu sélectionné : ${s.game_dir}`, true);
+    setGameState(`Jeu sélectionné : ${s.game_dir}`, true);
   }
   if (s.export_folder) $('#folder-path').value = s.export_folder;
   const dest = s.export_destination || (s.game_dir ? 'game' : 'zip');
@@ -1470,8 +1500,8 @@ async function selectGameDir(path) {
     $('#game-path').value = res.game_dir;
     state.settings.game_dir = res.game_dir;
     setGameState(res.looks_like_game
-      ? `✓ Jeu reconnu : ${res.game_dir}`
-      : `⚠ Dossier accepté, mais il ne ressemble pas à une installation du jeu : ${res.game_dir}`,
+      ? `Jeu reconnu : ${res.game_dir}`
+      : `Dossier accepté, mais il ne ressemble pas à une installation du jeu : ${res.game_dir}`,
       res.looks_like_game);
   } catch (err) {
     setGameState(err.message, false);

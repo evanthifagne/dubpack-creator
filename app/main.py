@@ -80,12 +80,12 @@ def api_setup_ffmpeg() -> dict:
     def work(job_ref, progress):
         progress(0.02, "Telechargement de ffmpeg (environ 110 Mo)")
         script = ROOT / "tools" / "setup_ffmpeg.py"
-        proc = subprocess.Popen(
+        proc = cancel.register(subprocess.Popen(
             [sys.executable, str(script), "--force"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, errors="replace",
             **({"creationflags": 0x08000000} if os.name == "nt" else {}),
-        )
+        ))
         last = ""
         assert proc.stdout is not None
         for line in proc.stdout:
@@ -102,6 +102,7 @@ def api_setup_ffmpeg() -> dict:
             else:
                 progress(job_ref.progress, line[:90])
         proc.wait()
+        cancel.unregister(proc)
         reset_tool_cache()
         configure_environment()
         caps = capabilities()
@@ -135,12 +136,12 @@ def api_setup_extras(payload: dict = Body(default={})) -> dict:
 
     def work(job_ref, progress):
         progress(0.03, "Telechargement de PyTorch et des modules (environ 2 Go)")
-        proc = subprocess.Popen(
+        proc = cancel.register(subprocess.Popen(
             [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", *packages],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, errors="replace",
             **({"creationflags": 0x08000000} if os.name == "nt" else {}),
-        )
+        ))
         assert proc.stdout is not None
         seen, last = 0, ""
         for line in proc.stdout:
@@ -153,7 +154,10 @@ def api_setup_extras(payload: dict = Body(default={})) -> dict:
                 # pip ne donne pas d'avancement global: on progresse par etapes vues.
                 progress(min(0.03 + seen * 0.02, 0.95), line[:90])
         proc.wait()
+        cancel.unregister(proc)
         if proc.returncode != 0:
+            if cancel.is_cancelled():
+                raise media.CancelledOperation()
             raise RuntimeError(f"pip a echoue. Derniere ligne: {last or 'aucune'}")
         progress(1.0, "Modules installes")
         return {"demucs": separate.available(),
@@ -292,6 +296,8 @@ def _settings(payload: dict) -> dict:
         "speakers": speakers,
         "max_line": float(payload.get("max_line") or 9.0),
         "use_embeddings": bool(payload.get("use_embeddings", True)),
+        "detect_sounds": bool(payload.get("detect_sounds", True)),
+        "sound_sensitivity": float(payload.get("sound_sensitivity") or 1.0),
     }
 
 

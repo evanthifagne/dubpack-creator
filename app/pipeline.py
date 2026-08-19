@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
-from . import asr, characters, diarize, dubpack, media, sources
+from . import asr, characters, diarize, dubpack, events, media, sources
 from .config import DEFAULT_MODEL
 
 ProgressCb = Callable[[float, str], None]
@@ -69,7 +69,8 @@ def ingest(project: dict, url: str | None, file_path: Path | None,
 def analyze(project: dict, cb: ProgressCb, model: str = DEFAULT_MODEL,
             language: str | None = None, engine: str | None = None,
             speakers: int | None = None, max_line: float = 9.0,
-            use_embeddings: bool = True, keep_edits: bool = False) -> dict:
+            use_embeddings: bool = True, keep_edits: bool = False,
+            detect_sounds: bool = True, sound_sensitivity: float = 1.0) -> dict:
     """Transcrit, découpe en répliques et regroupe les voix par personnage."""
     folder = dubpack.project_dir(project["id"])
     audio = Path(project["source"]["audio"])
@@ -90,6 +91,13 @@ def analyze(project: dict, cb: ProgressCb, model: str = DEFAULT_MODEL,
 
     cb(0.74, "Découpage en répliques")
     lines = asr.split_lines(raw, max_dur=max_line)
+
+    sounds: list[asr.Line] = []
+    if detect_sounds:
+        cb(0.76, "Recherche des sons non parlés")
+        sounds = events.detect_nonverbal(audio, lines, sensitivity=sound_sensitivity)
+        if sounds:
+            lines = sorted([*lines, *sounds], key=lambda l: l.start)
 
     cb(0.78, "Analyse des voix")
     diag = diarize.assign_speakers(
@@ -116,9 +124,11 @@ def analyze(project: dict, cb: ProgressCb, model: str = DEFAULT_MODEL,
             "text": line.text,
             "speaker": line.speaker,
             "enabled": True,
-            "tags": [],
+            "tags": ([getattr(line, "kind")] if getattr(line, "nonverbal", False) else []),
             "dub_only": False,
             "confidence": round(float(line.confidence), 3),
+            "nonverbal": bool(getattr(line, "nonverbal", False)),
+            "kind": getattr(line, "kind", None),
         }
         for line in lines
     ]
@@ -129,6 +139,7 @@ def analyze(project: dict, cb: ProgressCb, model: str = DEFAULT_MODEL,
         "diarization": diag["method"],
         "quality": diag["quality"],
         "max_line": max_line,
+        "sounds_detected": len(sounds),
     }
     project["suggestions"] = suggestions
     cb(1.0, f"{len(lines)} répliques, {len(chars)} personnage(s)")

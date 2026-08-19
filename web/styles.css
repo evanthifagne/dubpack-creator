@@ -18,6 +18,19 @@
 
 * { box-sizing: border-box; }
 
+/* Icônes Tabler: taille et couleur héritées du texte environnant. */
+.ic {
+  width: 17px; height: 17px; flex: 0 0 auto; vertical-align: -3px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.ic-sm { width: 14px; height: 14px; vertical-align: -2px; }
+.ic-brand { width: 26px; height: 26px; stroke: var(--accent); stroke-width: 1.8; }
+.ic-drop { width: 34px; height: 34px; stroke: var(--muted); stroke-width: 1.6; }
+.btn .ic { margin-right: 2px; }
+.line-btn .ic, .line-play .ic { width: 15px; height: 15px; vertical-align: -3px; margin: 0; }
+.job-steps div { display: flex; align-items: center; gap: 6px; }
+
 /* L'attribut `hidden` doit gagner contre nos règles `display` (grid/flex). */
 [hidden] { display: none !important; }
 
@@ -49,7 +62,7 @@ small { font-size: 11.5px; }
   position: sticky; top: 0; z-index: 40;
 }
 .brand { display: flex; align-items: center; gap: 12px; }
-.brand-mark { font-size: 26px; filter: drop-shadow(0 0 12px rgba(249, 115, 22, .45)); }
+.brand-mark { display: flex; filter: drop-shadow(0 0 10px rgba(249, 115, 22, .4)); }
 .brand-sub { margin: 1px 0 0; font-size: 12px; color: var(--muted); }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
 .caps { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
@@ -130,7 +143,7 @@ textarea { resize: vertical; }
   padding: 26px; text-align: center; transition: .15s; background: rgba(20, 25, 36, .5);
 }
 .dropzone.over { border-color: var(--accent); background: rgba(249, 115, 22, .07); }
-.dz-icon { font-size: 34px; }
+.dz-icon { display: flex; justify-content: center; }
 .dz-title { margin: 6px 0 2px; font-size: 15px; font-weight: 600; }
 .dz-sub { margin: 0; color: var(--muted); font-size: 12.5px; }
 .dz-or { position: relative; margin: 18px 0 14px; color: var(--muted); font-size: 12px; }
@@ -199,6 +212,13 @@ textarea { resize: vertical; }
   border: 1px solid rgba(0, 0, 0, .3);
 }
 .tl-line.sel { opacity: 1; outline: 2px solid #fff; z-index: 3; }
+/* Son non parle: hachures, pour le distinguer d'une replique parlee. */
+.tl-line.nv {
+  background-image: repeating-linear-gradient(45deg,
+    rgba(0, 0, 0, .28) 0 3px, transparent 3px 7px);
+  border-style: dashed;
+  font-style: italic;
+}
 .tl-line.off { opacity: .28; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; pointer-events: none; box-shadow: 0 0 8px rgba(255, 255, 255, .7); }
 
@@ -212,6 +232,15 @@ textarea { resize: vertical; }
 .line:focus-within { border-color: var(--accent); }
 .line.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(249, 115, 22, .18); }
 .line.off { opacity: .5; }
+/* Son non parle: on le distingue du texte sans le rendre secondaire. */
+.line.nonverbal .line-text { font-style: italic; color: #cbd5e1; }
+.nv-badge {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  padding: 1px 6px; border-radius: 99px; margin-right: 2px;
+  background: rgba(56, 189, 248, .16); color: #7dd3fc; white-space: nowrap;
+}
+.badge-nv { background: rgba(56, 189, 248, .12); color: #7dd3fc; border-color: rgba(56, 189, 248, .3); }
+.check-wide { grid-column: 1 / -1; }
 .line-bar { width: 4px; flex: 0 0 4px; background: var(--accent); }
 .line-main { flex: 1; min-width: 0; padding: 8px 10px; }
 .line-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
@@ -307,7 +336,7 @@ input.time { width: 66px; padding: 3px 5px; font-size: 12px; font-variant-numeri
 }
 .job-label { margin: 0 0 10px; color: var(--text); font-size: 13.5px; }
 .job-steps { max-height: 150px; overflow-y: auto; font-size: 12px; color: var(--muted); margin-bottom: 16px; display: grid; gap: 2px; }
-.job-steps div::before { content: "✓ "; color: var(--ok); }
+.job-steps div .ic { stroke: var(--ok); }
 
 .diag-card {
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px;

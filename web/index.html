@@ -5,13 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DubPack Creator — Choicer Voicer</title>
 <link rel="stylesheet" href="/static/styles.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🎙️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f97316' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 5a3 3 0 0 1 3 -3a3 3 0 0 1 3 3v5a3 3 0 0 1 -3 3a3 3 0 0 1 -3 -3l0 -5'/><path d='M5 10a7 7 0 0 0 14 0'/><path d='M8 21l8 0'/><path d='M12 17l0 4'/></svg>">
 </head>
 <body>
 
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true"><symbol id="i-microphone" viewBox="0 0 24 24"><path d="M9 5a3 3 0 0 1 3 -3a3 3 0 0 1 3 3v5a3 3 0 0 1 -3 3a3 3 0 0 1 -3 -3l0 -5" /> <path d="M5 10a7 7 0 0 0 14 0" /> <path d="M8 21l8 0" /> <path d="M12 17l0 4" /></symbol><symbol id="i-movie" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12" /> <path d="M8 4l0 16" /> <path d="M16 4l0 16" /> <path d="M4 8l4 0" /> <path d="M4 16l4 0" /> <path d="M4 12l16 0" /> <path d="M16 8l4 0" /> <path d="M16 16l4 0" /></symbol><symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0" /> <path d="M10 11l0 6" /> <path d="M14 11l0 6" /> <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /> <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></symbol><symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13 -8l-13 -8" /></symbol><symbol id="i-pause" viewBox="0 0 24 24"><path d="M6 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12" /> <path d="M14 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12" /></symbol><symbol id="i-prev" viewBox="0 0 24 24"><path d="M20 5v14l-12 -7l12 -7" /> <path d="M4 5l0 14" /></symbol><symbol id="i-next" viewBox="0 0 24 24"><path d="M4 5v14l12 -7l-12 -7" /> <path d="M20 5l0 14" /></symbol><symbol id="i-scissors" viewBox="0 0 24 24"><path d="M3 7a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /> <path d="M3 17a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /> <path d="M8.6 8.6l10.4 10.4" /> <path d="M8.6 15.4l10.4 -10.4" /></symbol><symbol id="i-merge" viewBox="0 0 24 24"><path d="M16 8l-4 -4l-4 4" /> <path d="M12 20v-16" /> <path d="M18 18c-4 -1.333 -6 -4.667 -6 -10" /> <path d="M6 18c4 -1.333 6 -4.667 6 -10" /></symbol><symbol id="i-camera" viewBox="0 0 24 24"><path d="M5 7h1a2 2 0 0 0 2 -2a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2" /> <path d="M9 13a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5l10 -10" /></symbol><symbol id="i-back" viewBox="0 0 24 24"><path d="M5 12l14 0" /> <path d="M5 12l6 6" /> <path d="M5 12l6 -6" /></symbol><symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 10a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /> <path d="M6 4v4" /> <path d="M6 12v8" /> <path d="M10 16a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /> <path d="M12 4v10" /> <path d="M12 18v2" /> <path d="M16 7a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /> <path d="M18 4v1" /> <path d="M18 9v11" /></symbol><symbol id="i-download" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 11l5 5l5 -5" /> <path d="M12 4l0 12" /></symbol><symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6l-12 12" /> <path d="M6 6l12 12" /></symbol><symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 9v4" /> <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" /> <path d="M12 16h.01" /></symbol><symbol id="i-ok" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /> <path d="M9 12l2 2l4 -4" /></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5l0 14" /> <path d="M5 12l14 0" /></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path d="M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2" /></symbol><symbol id="i-zip" viewBox="0 0 24 24"><path d="M6 20.735a2 2 0 0 1 -1 -1.735v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2h-1" /> <path d="M11 17a2 2 0 0 1 2 2v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1v-2a2 2 0 0 1 2 -2" /> <path d="M11 5l-1 0" /> <path d="M13 7l-1 0" /> <path d="M11 9l-1 0" /> <path d="M13 11l-1 0" /> <path d="M11 13l-1 0" /> <path d="M13 15l-1 0" /></symbol><symbol id="i-desktop" viewBox="0 0 24 24"><path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10" /> <path d="M7 20h10" /> <path d="M9 16v4" /> <path d="M15 16v4" /></symbol><symbol id="i-cpu" viewBox="0 0 24 24"><path d="M5 6a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -12" /> <path d="M9 9h6v6h-6l0 -6" /> <path d="M3 10h2" /> <path d="M3 14h2" /> <path d="M10 3v2" /> <path d="M14 3v2" /> <path d="M21 10h-2" /> <path d="M21 14h-2" /> <path d="M14 21v-2" /> <path d="M10 21v-2" /></symbol><symbol id="i-wand" viewBox="0 0 24 24"><path d="M6 21l15 -15l-3 -3l-15 15l3 3" /> <path d="M15 6l3 3" /> <path d="M9 3a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2" /> <path d="M19 13a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2" /></symbol><symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /> <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></symbol><symbol id="i-volume" viewBox="0 0 24 24"><path d="M15 8a5 5 0 0 1 0 8" /> <path d="M17.7 5a9 9 0 0 1 0 14" /> <path d="M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5 -4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5 -4.5" /></symbol><symbol id="i-clock" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /> <path d="M12 7v5l3 3" /></symbol></svg>
+
+
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark">🎙️</span>
+    <span class="brand-mark"><svg class="ic-brand" aria-hidden="true"><use href="#i-microphone"/></svg></span>
     <div>
       <h1>DubPack Creator</h1>
       <p class="brand-sub">Générateur de dub packs pour <strong>Choicer Voicer</strong></p>
@@ -20,7 +23,7 @@
   <div class="topbar-right">
     <div id="caps" class="caps" title="Cliquer pour ouvrir le diagnostic"></div>
     <button id="btn-diag" class="btn btn-ghost" title="Diagnostic et réparation">Diagnostic</button>
-    <button id="btn-home" class="btn btn-ghost" hidden>← Mes projets</button>
+    <button id="btn-home" class="btn btn-ghost" hidden><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg> Mes projets</button>
   </div>
 </header>
 
@@ -29,7 +32,7 @@
   <section class="panel hero">
     <h2>1. Dépose ta vidéo</h2>
     <div id="dropzone" class="dropzone">
-      <div class="dz-icon">🎬</div>
+      <div class="dz-icon"><svg class="ic-drop" aria-hidden="true"><use href="#i-movie"/></svg></div>
       <p class="dz-title">Glisse un fichier MP4 ici</p>
       <p class="dz-sub">ou <button id="btn-pick" class="link">choisis un fichier</button> — mp4, mkv, mov, webm, mp3…</p>
       <input id="file-input" type="file" accept="video/*,audio/*" hidden>
@@ -77,6 +80,10 @@
         </select>
         <small>Laisse en auto si tu ne sais pas.</small>
       </label>
+      <label class="check check-wide"><input type="checkbox" id="set-sounds" checked>
+        <span>Repérer les sons non parlés
+          <small>cris, souffles, grognements, impacts — ajoutés comme répliques à doubler,
+            avec un libellé du type <code>[cri]</code> que tu peux corriger</small></span></label>
       <label>
         <span>Longueur max d'une réplique</span>
         <select id="set-maxline">
@@ -120,9 +127,9 @@
         <div id="subtitle-overlay" class="subtitle-overlay"></div>
       </div>
       <div class="transport">
-        <button id="btn-play" class="btn btn-ghost" title="Espace">▶︎</button>
-        <button id="btn-prev" class="btn btn-ghost" title="Réplique précédente">⏮</button>
-        <button id="btn-next" class="btn btn-ghost" title="Réplique suivante">⏭</button>
+        <button id="btn-play" class="btn btn-ghost" title="Espace"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button id="btn-prev" class="btn btn-ghost" title="Réplique précédente"><svg class="ic" aria-hidden="true"><use href="#i-prev"/></svg></button>
+        <button id="btn-next" class="btn btn-ghost" title="Réplique suivante"><svg class="ic" aria-hidden="true"><use href="#i-next"/></svg></button>
         <span id="timecode" class="timecode">0:00.00 / 0:00.00</span>
         <label class="loop-toggle"><input type="checkbox" id="chk-loop"> Boucler la réplique</label>
         <span class="grow"></span>
@@ -137,10 +144,12 @@
 
     <section class="panel lines-panel">
       <div class="panel-head">
-        <h2>Répliques <span id="line-count" class="badge">0</span></h2>
+        <h2>Répliques <span id="line-count" class="badge">0</span>
+          <span id="sound-count" class="badge badge-nv" hidden></span></h2>
         <div class="panel-head-actions">
           <input id="line-filter" type="search" placeholder="Filtrer…" spellcheck="false">
-          <button id="btn-add-line" class="btn btn-ghost" title="Ajouter une réplique à la position courante">+ Réplique</button>
+          <button id="btn-drop-sounds" class="btn btn-ghost" title="Retirer tous les sons non parlés détectés" hidden>Retirer les sons</button>
+          <button id="btn-add-line" class="btn btn-ghost" title="Ajouter une réplique à la position courante"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg> Réplique</button>
         </div>
       </div>
       <div id="lines" class="lines"></div>
@@ -323,7 +332,7 @@
     <div class="line-bar"></div>
     <div class="line-main">
       <div class="line-top">
-        <button class="line-play" title="Écouter la réplique">▶</button>
+        <button class="line-play" title="Écouter la réplique"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg></button>
         <span class="line-index"></span>
         <select class="line-speaker"></select>
         <input class="line-start time" type="text" inputmode="decimal" title="Début (s)">
@@ -331,10 +340,10 @@
         <input class="line-end time" type="text" inputmode="decimal" title="Fin (s)">
         <span class="line-dur"></span>
         <span class="grow"></span>
-        <button class="line-btn line-split" title="Couper au curseur">✂</button>
-        <button class="line-btn line-merge" title="Fusionner avec la suivante">⤵</button>
+        <button class="line-btn line-split" title="Couper au curseur"><svg class="ic" aria-hidden="true"><use href="#i-scissors"/></svg></button>
+        <button class="line-btn line-merge" title="Fusionner avec la suivante"><svg class="ic" aria-hidden="true"><use href="#i-merge"/></svg></button>
         <label class="line-enabled" title="Inclure dans l'export"><input type="checkbox" checked></label>
-        <button class="line-btn line-del" title="Supprimer">🗑</button>
+        <button class="line-btn line-del" title="Supprimer"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg></button>
       </div>
       <textarea class="line-text" rows="2" placeholder="Sous-titre affiché dans le jeu…"></textarea>
     </div>

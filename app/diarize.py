@@ -203,7 +203,10 @@ def assign_speakers(audio: Path, lines: list[Line], forced: int | None = None,
         vectors = _builtin_embeddings(audio, lines, cb)
 
     durations = np.array([max(l.end - l.start, 0.0) for l in lines])
-    reliable = durations >= _RELIABLE_SPEECH
+    # Un cri ou un impact ne doit pas servir de reference pour definir une voix:
+    # on le classe sans le laisser fonder un personnage.
+    verbal = np.array([not getattr(l, "nonverbal", False) for l in lines])
+    reliable = (durations >= _RELIABLE_SPEECH) & verbal
     if reliable.sum() < 2:
         reliable = np.ones(len(lines), dtype=bool)
 

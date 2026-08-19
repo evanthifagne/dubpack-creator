@@ -47,6 +47,26 @@ TOUT SE PASSE SUR TON PC
   Les suivantes sont immediates.
 
 --------------------------------------------------------
+LES CRIS, SOUFFLES ET IMPACTS
+
+  Whisper transcrit de la parole. Un cri de bagarre ou
+  un souffle n'est pas du texte : sans traitement, il
+  disparaissait du pack.
+
+  L'option "Reperer les sons non parles" (cochee par
+  defaut) les ajoute comme repliques a doubler, avec un
+  libelle propose : [cri], [grognement], [impact],
+  [souffle].
+
+  Ils sont reconnaissables dans la liste (pastille
+  bleue) et sur la timeline (hachures). Remplace le
+  libelle par ce que tu veux voir dans le jeu, par
+  exemple [il hurle].
+
+  Le bouton "Retirer les sons" les supprime tous si la
+  detection a ete trop bavarde.
+
+--------------------------------------------------------
 TELECHARGER LES MODELES A L'AVANCE
 
   Sur l'accueil : "Modeles de transcription" -> "Gerer".

@@ -128,7 +128,39 @@ python run.py --install-extras   # ajouter Demucs + empreintes vocales avancées
 5. **Onglet Export** — génère éventuellement le fond sonore, vérifie les
    avertissements, puis exporte. Tu récupères un dossier **et** un ZIP.
 
-## 3 bis. Pendant le traitement
+## 3 bis. Les sons non parlés (cris, souffles, impacts)
+
+Whisper transcrit de la parole. Un cri dans une bagarre, un souffle, un coup : ce
+n'est pas du texte, et la détection d'activité vocale les écarte activement.
+Sans traitement particulier, ces sons **disparaissaient** du pack — or dans une
+scène d'action, ce sont justement eux qu'on veut doubler.
+
+L'option **Repérer les sons non parlés** (activée par défaut) analyse les
+passages sonores que la transcription n'a pas couverts et les ajoute comme
+répliques, avec un libellé proposé :
+
+| Libellé | Ce qui le déclenche |
+|---|---|
+| `[cri]` | voisé, hauteur élevée |
+| `[grognement]` | voisé, hauteur basse ou moyenne |
+| `[impact]` | attaque sèche suivie d'une extinction rapide |
+| `[souffle]` | non voisé et tenu |
+| `[son]` | le reste |
+
+Ces répliques sont **repérables d'un coup d'œil** : pastille bleue dans la liste,
+hachures sur la timeline, texte en italique. Le libellé est un point de départ —
+remplace-le par ce que tu veux voir affiché dans le jeu (`[il hurle]`,
+`[grognement de douleur]`…). Le bouton **Retirer les sons** les supprime tous
+d'un coup si la détection a été trop bavarde.
+
+La classification reste grossière et l'assume : un choc grave peut passer pour un
+grognement. Ce qui compte, c'est que le son **soit là**, au bon instant, avec la
+bonne durée — le libellé, tu le corriges en deux secondes.
+
+Un son non parlé ne sert jamais à définir un personnage : il est rattaché à la
+voix la plus proche, sans peser sur la détection des voix.
+
+## 3 ter. Pendant le traitement
 
 La fenêtre de suivi montre l'avancement, le **temps écoulé** et une **estimation
 du temps restant** dès que le rythme est mesurable. Quand une étape n'a pas
