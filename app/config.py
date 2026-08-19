@@ -126,10 +126,37 @@ def module_available(mod: str) -> bool:
         return False
 
 
+@lru_cache(maxsize=1)
+def ffmpeg_dir() -> str | None:
+    """Dossier contenant ffmpeg, à communiquer aux outils externes."""
+    try:
+        return str(Path(ffmpeg_path()).parent)
+    except RuntimeError:
+        return None
+
+
+def configure_environment() -> str | None:
+    """Ajoute le dossier de ffmpeg au PATH du processus.
+
+    Indispensable: yt-dlp cherche ffmpeg dans le PATH pour fusionner les pistes
+    vidéo et audio de YouTube. Il ignore complètement notre dossier bin/, donc
+    sans cela le téléchargement échoue avec « ffmpeg is not installed » alors que
+    le binaire est bel et bien livré avec l'outil.
+    """
+    folder = ffmpeg_dir()
+    if not folder:
+        return None
+    current = os.environ.get("PATH", "")
+    parts = current.split(os.pathsep) if current else []
+    if folder not in parts:
+        os.environ["PATH"] = os.pathsep.join([folder, *parts])
+    return folder
+
+
 def reset_tool_cache() -> None:
     """Oublie les chemins mémorisés, après une installation de ffmpeg."""
     for func in (_resolve_tool, ffmpeg_path, ffprobe_path, ffmpeg_encoders,
-                 yt_dlp_available):
+                 yt_dlp_available, ffmpeg_dir):
         func.cache_clear()
 
 
@@ -184,6 +211,10 @@ def diagnose() -> dict:
         "libvorbis": "libvorbis" in encoders,
     }
     report["yt_dlp"] = yt_dlp_available()
+    report["ffmpeg_dir"] = ffmpeg_dir()
+    report["ffmpeg_on_path_for_tools"] = bool(
+        ffmpeg_dir() and ffmpeg_dir() in os.environ.get("PATH", "").split(os.pathsep)
+    )
     report["can_download_ffmpeg"] = os.name == "nt"
     return report
 

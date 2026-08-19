@@ -246,6 +246,7 @@ Si ffmpeg manque au démarrage, ce panneau s'ouvre tout seul.
 | Le pack n'apparaît pas dans le jeu | un dossier en trop dans `packs_voice`, ou `dub_video.ogv` manquant |
 | Le jeu n'est pas détecté | dans le jeu : Modpack Guides → Dub Mode Packs → Open Folder, puis colle le chemin |
 | « Un pack du même nom existe déjà » | coche « Remplacer un pack du même nom » avant d'exporter |
+| « ffmpeg is not installed » en collant un lien | corrigé en v1.0.3 : yt-dlp ne cherchait ffmpeg que dans le PATH, jamais dans `bin/`. Mets l'outil à jour |
 | Un lien vidéo échoue | `pip install -U yt-dlp` dans `.venv` : les sites changent souvent |
 | Le port est déjà pris | l'outil en choisit un autre automatiquement — lis l'URL affichée dans la console |
 

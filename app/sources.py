@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
-from .config import VIDEO_EXTS, AUDIO_EXTS
+from .config import VIDEO_EXTS, AUDIO_EXTS, configure_environment, ffmpeg_dir
 
 ProgressCb = Callable[[float, str], None] | None
 
@@ -44,6 +44,11 @@ def download_url(url: str, dest_dir: Path, cb: ProgressCb = None,
         elif status.get("status") == "finished":
             cb(1.0, "Téléchargement terminé")
 
+    # yt-dlp doit fusionner les pistes video et audio: il lui faut ffmpeg, et il
+    # ne le cherche que dans le PATH. On le lui indique explicitement.
+    configure_environment()
+    ffmpeg_home = ffmpeg_dir()
+
     opts = {
         "outtmpl": str(dest_dir / "source.%(ext)s"),
         "format": (
@@ -59,6 +64,8 @@ def download_url(url: str, dest_dir: Path, cb: ProgressCb = None,
         "restrictfilenames": True,
         "overwrites": True,
     }
+    if ffmpeg_home:
+        opts["ffmpeg_location"] = ffmpeg_home
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
 

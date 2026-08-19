@@ -85,6 +85,11 @@ PROBLEMES COURANTS
       Installe-le depuis python.org en cochant
       "Add python.exe to PATH", puis relance INSTALLER.bat.
 
+  "ffmpeg is not installed" en collant un lien video
+      Corrige depuis la version 1.0.3. yt-dlp, qui telecharge
+      la video, ne cherchait ffmpeg que dans le PATH et jamais
+      dans le dossier bin\ de l'outil. Mets a jour l'outil.
+
   "ffmpeg n'est pas installe" / badge ffmpeg rouge
       Diagnostic -> "Installer ffmpeg automatiquement".
       Si ca echoue encore, ton antivirus met probablement

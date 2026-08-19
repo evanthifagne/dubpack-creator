@@ -15,10 +15,13 @@ from fastapi.staticfiles import StaticFiles
 from . import asr, dubpack, gamedir, media, picker, pipeline, separate, sources
 from .config import module_available
 from .config import (DEFAULT_MODEL, PROJECTS_DIR, ROOT, WEB_DIR, capabilities,
-                     diagnose, reset_tool_cache)
+                     configure_environment, diagnose, reset_tool_cache)
 from .jobs import manager
 
 app = FastAPI(title="DubPack Creator", docs_url=None, redoc_url=None)
+
+# Rend ffmpeg visible pour les outils externes (yt-dlp, Demucs) des le demarrage.
+configure_environment()
 
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
@@ -100,6 +103,7 @@ def api_setup_ffmpeg() -> dict:
                 progress(job_ref.progress, line[:90])
         proc.wait()
         reset_tool_cache()
+        configure_environment()
         caps = capabilities()
         if proc.returncode != 0 or not caps["ffmpeg"]:
             raise RuntimeError(

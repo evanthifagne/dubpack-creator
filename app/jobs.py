@@ -1,11 +1,20 @@
 """Suivi des tâches longues (transcription, encodage) et flux de progression."""
 from __future__ import annotations
 
+import re
 import threading
 import traceback
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable
+
+
+# yt-dlp et ffmpeg colorent leur sortie: ces codes salissent l'interface.
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\[[0-9];[0-9]{2}m")
+
+
+def clean_message(text: str) -> str:
+    return _ANSI.sub("", text or "").strip()
 
 
 @dataclass
@@ -88,7 +97,7 @@ class JobManager:
                 job.label = "Annulé"
             except Exception as exc:
                 job.status = "error"
-                job.error = str(exc) or exc.__class__.__name__
+                job.error = clean_message(str(exc)) or exc.__class__.__name__
                 job.label = "Erreur"
                 traceback.print_exc()
 
