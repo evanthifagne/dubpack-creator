@@ -253,11 +253,25 @@
 <!-- ============================ OVERLAYS ============================ -->
 <div id="job-overlay" class="overlay" hidden>
   <div class="job-card">
-    <h2 id="job-title">Traitement…</h2>
+    <div class="job-head">
+      <span class="spinner" aria-hidden="true"></span>
+      <h2 id="job-title">Traitement…</h2>
+    </div>
     <div class="progress"><div id="job-bar" class="progress-bar"></div></div>
+    <div class="job-meta">
+      <span id="job-pct">0 %</span>
+      <span id="job-time"></span>
+    </div>
     <p id="job-label" class="job-label"></p>
+    <p id="job-note" class="job-note" hidden></p>
     <div id="job-steps" class="job-steps"></div>
-    <button id="btn-cancel-job" class="btn btn-ghost">Annuler</button>
+    <div class="job-actions">
+      <button id="btn-background-job" class="btn btn-primary">Continuer sans attendre</button>
+      <button id="btn-cancel-job" class="btn btn-ghost">Annuler la tâche</button>
+    </div>
+    <p class="job-hint muted small">Tu peux fermer cette fenêtre : la tâche continue et
+      reste suivie en bas à gauche. Tu peux même en lancer d'autres, elles se feront
+      l'une après l'autre.</p>
   </div>
 </div>
 
@@ -270,6 +284,8 @@
     <div id="diag-body" class="diag-body"></div>
   </div>
 </div>
+
+<div id="job-dock" class="job-dock" hidden></div>
 
 <div id="toasts" class="toasts"></div>
 

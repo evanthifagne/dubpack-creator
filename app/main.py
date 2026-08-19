@@ -75,7 +75,7 @@ def api_setup_ffmpeg() -> dict:
     """Telecharge et installe ffmpeg dans bin/ (Windows)."""
     if manager.active_for("_setup"):
         raise HTTPException(status_code=409, detail="Une installation est deja en cours.")
-    job = manager.create("setup-ffmpeg", "_setup")
+    job = manager.create("setup-ffmpeg", "_setup", title="Installation de ffmpeg")
 
     def work(job_ref, progress):
         progress(0.02, "Telechargement de ffmpeg (environ 110 Mo)")
@@ -130,7 +130,8 @@ def api_setup_extras(payload: dict = Body(default={})) -> dict:
         raise HTTPException(status_code=400, detail="Module inconnu.")
     if manager.active_for("_setup"):
         raise HTTPException(status_code=409, detail="Une installation est deja en cours.")
-    job = manager.create(f"setup-{which}", "_setup")
+    job = manager.create(f"setup-{which}", "_setup",
+                         title=f"Installation · {which}")
 
     def work(job_ref, progress):
         progress(0.03, "Telechargement de PyTorch et des modules (environ 2 Go)")
@@ -265,7 +266,8 @@ async def api_import(
         raise HTTPException(status_code=400, detail="Ce lien n'est pas une URL http(s) valide.")
 
     dubpack.save_project(project)
-    job = manager.create("import", project["id"])
+    job = manager.create("import", project["id"],
+                         title=f"Création · {project['name']}")
 
     def work(job_ref, progress):
         proj = dubpack.load_project(project["id"])
@@ -293,7 +295,8 @@ def api_analyze(project_id: str, payload: dict = Body(default={})) -> dict:
         raise HTTPException(status_code=409, detail="Une tâche est déjà en cours sur ce projet.")
     opts = _settings(payload)
     keep = bool(payload.get("keep_names", True))
-    job = manager.create("analyze", project_id)
+    job = manager.create("analyze", project_id,
+                         title=f"Transcription · {project.get('name', project_id)}")
 
     def work(job_ref, progress):
         proj = dubpack.load_project(project_id)
@@ -316,7 +319,8 @@ def api_backing(project_id: str, payload: dict = Body(default={})) -> dict:
         raise HTTPException(status_code=400, detail=separate.install_hint())
     if manager.active_for(project_id):
         raise HTTPException(status_code=409, detail="Une tâche est déjà en cours sur ce projet.")
-    job = manager.create("backing", project_id)
+    job = manager.create("backing", project_id,
+                         title=f"Fond sonore · {project.get('name', project_id)}")
     folder = dubpack.project_dir(project_id)
 
     def work(job_ref, progress):
@@ -389,7 +393,8 @@ def api_export(project_id: str, payload: dict = Body(default={})) -> dict:
             raise HTTPException(status_code=400, detail=f"Dossier introuvable: {target}")
         target = str(Path(target).expanduser())
 
-    job = manager.create("export", project_id)
+    job = manager.create("export", project_id,
+                         title=f"Export · {project.get('name', project_id)}")
     reuse = bool(payload.get("reuse_video", True))
     overwrite = bool(payload.get("overwrite", False))
     # Un ZIP n'a d'intérêt que si on ne dépose pas déjà le dossier dans le jeu.
@@ -596,6 +601,12 @@ def api_pick_folder(payload: dict = Body(default={})) -> dict:
 # ---------------------------------------------------------------------------
 # Jobs
 # ---------------------------------------------------------------------------
+
+@app.get("/api/jobs")
+def api_jobs() -> dict:
+    """Taches en cours et en attente, pour le suivi en arriere-plan."""
+    return {"jobs": [j.to_dict() for j in manager.active()]}
+
 
 @app.get("/api/jobs/{job_id}")
 def api_job(job_id: str) -> dict:

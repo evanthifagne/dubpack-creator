@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import threading
 import unicodedata
 import zipfile
 from datetime import datetime, timezone
@@ -98,9 +99,27 @@ def project_dir(project_id: str) -> Path:
     return PROJECTS_DIR / safe
 
 
+# L'attribution d'un identifiant doit être atomique: deux imports lancés dans la
+# même seconde se retrouveraient sinon dans le même dossier et s'écraseraient.
+_ID_LOCK = threading.Lock()
+
+
+def _claim_id(stamp: datetime) -> str:
+    base = stamp.strftime("%Y%m%d-%H%M%S")
+    with _ID_LOCK:
+        candidate = base
+        suffix = 1
+        while (PROJECTS_DIR / candidate).exists():
+            suffix += 1
+            candidate = f"{base}-{suffix}"
+        # On réserve le dossier tout de suite: le prochain appel le verra occupé.
+        (PROJECTS_DIR / candidate).mkdir(parents=True)
+    return candidate
+
+
 def new_project(name: str) -> dict:
     stamp = datetime.now(timezone.utc)
-    pid = stamp.strftime("%Y%m%d-%H%M%S")
+    pid = _claim_id(stamp)
     return {
         "id": pid,
         "created": stamp.isoformat(timespec="seconds"),

@@ -77,7 +77,7 @@ def analyze(project: dict, cb: ProgressCb, model: str = DEFAULT_MODEL,
         audio = media.extract_audio(project["source"]["file"], folder / "audio16k.wav")
 
     duration = float(project["source"].get("duration") or 0.0)
-    cb(0.02, "Chargement du modèle de transcription")
+    cb(0.02, asr.loading_label(model))
     raw, detected, used_engine = asr.transcribe(
         audio, model_name=model, language=language, engine=engine,
         duration=duration, cb=_scaled(cb, 0.03, 0.72),

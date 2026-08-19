@@ -106,6 +106,25 @@ python run.py --install-extras   # ajouter Demucs + empreintes vocales avancées
 5. **Onglet Export** — génère éventuellement le fond sonore, vérifie les
    avertissements, puis exporte. Tu récupères un dossier **et** un ZIP.
 
+## 3 bis. Pendant le traitement
+
+La fenêtre de suivi montre l'avancement, le **temps écoulé** et une **estimation
+du temps restant** dès que le rythme est mesurable. Quand une étape n'a pas
+d'avancement à afficher — le chargement du modèle, par exemple — la barre passe
+en animation continue pour montrer que ça travaille.
+
+**« Continuer sans attendre »** ferme la fenêtre sans rien interrompre : la tâche
+poursuit et reste suivie en bas à gauche, où un clic ramène le détail. Tu peux
+donc naviguer, éditer un autre pack, ou en lancer d'autres.
+
+Les tâches lourdes (transcription, encodage, séparation des voix) se font **une à
+la fois**, dans l'ordre de lancement : deux transcriptions simultanées ne feraient
+que se ralentir. Tu peux donc enchaîner cinq vidéos et laisser tourner. Chaque
+tâche en attente indique son rang, et peut être annulée avant démarrage.
+
+Si tu rafraîchis ou rouvres la page, le suivi se reprend tout seul : les tâches
+vivent dans le serveur, pas dans le navigateur.
+
 ## 4. Où atterrit le pack (onglet Export)
 
 Trois destinations, au choix :

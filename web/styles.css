@@ -257,8 +257,35 @@ input.time { width: 66px; padding: 3px 5px; font-size: 12px; font-variant-numeri
 /* ---------------------------------------------------------------- overlay */
 .overlay { position: fixed; inset: 0; background: rgba(8, 10, 15, .82); backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 100; }
 .job-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 26px; width: min(560px, 92vw); box-shadow: var(--shadow); }
-.progress { height: 9px; background: var(--bg-2); border-radius: 99px; overflow: hidden; margin: 16px 0 10px; }
+.job-head { display: flex; align-items: center; gap: 11px; }
+.spinner {
+  width: 17px; height: 17px; flex: 0 0 17px; border-radius: 50%;
+  border: 2.5px solid rgba(249, 115, 22, .22); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.progress { height: 9px; background: var(--bg-2); border-radius: 99px; overflow: hidden; margin: 16px 0 8px; }
 .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
+/* Quand l'avancement ne bouge plus (chargement du modele), on montre quand
+   meme que ca travaille, sinon l'ecran a l'air fige. */
+.progress-bar.waiting {
+  width: 100% !important;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 45%, var(--accent-2) 55%, transparent 100%);
+  background-size: 220% 100%;
+  animation: sweep 1.5s ease-in-out infinite;
+}
+@keyframes sweep { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+
+.job-meta {
+  display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px;
+  font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+#job-pct { font-weight: 600; color: var(--text); }
+.job-note {
+  margin: 0 0 12px; padding: 9px 11px; border-radius: 8px; font-size: 12.5px;
+  background: var(--bg-2); border-left: 3px solid var(--warn); color: #fde68a;
+}
 .job-label { margin: 0 0 10px; color: var(--text); font-size: 13.5px; }
 .job-steps { max-height: 150px; overflow-y: auto; font-size: 12px; color: var(--muted); margin-bottom: 16px; display: grid; gap: 2px; }
 .job-steps div::before { content: "✓ "; color: var(--ok); }
@@ -287,6 +314,36 @@ input.time { width: 66px; padding: 3px 5px; font-size: 12px; font-variant-numeri
 .diag-fix h3 { margin: 0 0 6px; color: var(--text); text-transform: none; letter-spacing: 0; font-size: 13.5px; }
 .diag-fix p { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
 .diag-fix code { font-size: 11.5px; }
+.job-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.job-hint { margin: 10px 0 0; }
+
+/* Suivi persistant: la tache continue meme quand la fenetre est fermee. */
+.job-dock {
+  position: fixed; bottom: 20px; left: 20px; z-index: 150;
+  display: grid; gap: 8px; width: min(330px, calc(100vw - 40px));
+}
+.dock-item {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 13px; box-shadow: var(--shadow); cursor: pointer; transition: .12s;
+}
+.dock-item:hover { border-color: var(--accent); }
+.dock-top { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+.dock-title { font-size: 12.5px; font-weight: 600; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock-pct { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dock-bar { height: 5px; background: var(--bg-2); border-radius: 99px; overflow: hidden; }
+.dock-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
+.dock-fill.waiting {
+  width: 100% !important;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 45%, var(--accent-2) 55%, transparent 100%);
+  background-size: 220% 100%; animation: sweep 1.5s ease-in-out infinite;
+}
+.dock-label { font-size: 11.5px; color: var(--muted); margin-top: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock-item.queued { opacity: .78; }
+.dock-item.queued .spinner { animation-play-state: paused; opacity: .45; }
+.spinner.sm { width: 13px; height: 13px; flex: 0 0 13px; border-width: 2px; }
+
 .toasts { position: fixed; bottom: 20px; right: 20px; display: grid; gap: 8px; z-index: 200; max-width: 420px; }
 .toast { padding: 11px 14px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 13px; animation: slide .25s; }
 .toast.err { border-color: rgba(248, 113, 113, .45); color: #fecaca; }

@@ -15,6 +15,9 @@ const state = {
   previewAudio: new Audio(),
   filter: '',
   settings: {},
+  jobs: new Map(),
+  watching: null,
+  jobTicker: null,
   gameCandidates: [],
 };
 
@@ -100,7 +103,12 @@ function settingsFromForm() {
 function refreshCreateButton() {
   const ready = !!state.pendingFile || $('#url-input').value.trim().length > 8;
   $('#btn-create').disabled = !ready;
-  $('#create-hint').textContent = ready ? 'Tout se passe en local sur ta machine.' : 'Ajoute d\'abord un fichier ou un lien.';
+  const busy = state.jobs.size;
+  $('#create-hint').textContent = !ready
+    ? 'Ajoute d\'abord un fichier ou un lien.'
+    : busy
+      ? `Tout se passe en local. ${busy} tâche(s) en cours : celle-ci se mettra à la suite.`
+      : 'Tout se passe en local sur ta machine.';
 }
 
 function setupHome() {
@@ -147,10 +155,23 @@ async function createProject() {
   $('#btn-create').disabled = true;
   try {
     const res = await api('/api/projects/import', { method: 'POST', body });
-    openJob(res.job, 'Création du dub pack', async () => {
-      await openProject(res.project_id);
-      toast('Dub pack généré. Vérifie les répliques et les personnages.', 'ok');
+    openJob(res.job, res.job.title || 'Création du dub pack', async () => {
+      // Si l'utilisateur travaille ailleurs, on ne lui vole pas l'ecran.
+      const onHome = !$('#view-home').hidden;
+      if (onHome) {
+        await openProject(res.project_id);
+        toast('Dub pack généré. Vérifie les répliques et les personnages.', 'ok');
+      } else {
+        loadProjects();
+        toast('Un dub pack est prêt : retrouve-le dans « Mes projets ».', 'ok');
+      }
     });
+    // On libere le formulaire: l'utilisateur peut en lancer un autre tout de suite.
+    state.pendingFile = null;
+    $('#url-input').value = '';
+    $('#picked').hidden = true;
+    $('#file-input').value = '';
+    refreshCreateButton();
   } catch (err) {
     toast(err.message, 'err');
   } finally {
@@ -193,37 +214,225 @@ const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /* ------------------------------------------------------------------ jobs */
+/* Les taches vivent cote serveur dans une file a un seul poste. Ici on les
+   suit toutes en parallele: la fenetre de detail n'est qu'une vue sur l'une
+   d'elles, et sa fermeture n'interrompt rien. */
+const clock = (seconds) => {
+  seconds = Math.max(0, Math.round(seconds));
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m >= 60) return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+
+function trackJob(job, title, onDone) {
+  state.jobs.set(job.id, {
+    id: job.id,
+    title: title || job.title || 'Traitement',
+    onDone,
+    started: Date.now(),
+    lastProgress: 0,
+    lastMove: Date.now(),
+    samples: [],
+    snapshot: job,
+  });
+  startJobWatcher();
+}
+
 function openJob(job, title, onDone) {
-  $('#job-title').textContent = title;
+  trackJob(job, title, onDone);
+  showJobWindow(job.id);
+}
+
+function showJobWindow(jobId) {
+  const entry = state.jobs.get(jobId);
+  if (!entry) return;
+  state.watching = jobId;
+  $('#job-title').textContent = entry.title;
   $('#job-overlay').hidden = false;
-  $('#job-steps').innerHTML = '';
-  $('#btn-cancel-job').onclick = () => api(`/api/jobs/${job.id}/cancel`, { method: 'POST' });
-  pollJob(job.id, onDone);
+  $('#btn-cancel-job').onclick = async () => {
+    if (!confirm('Annuler cette tâche ?')) return;
+    await api(`/api/jobs/${jobId}/cancel`, { method: 'POST' }).catch(() => {});
+  };
+  $('#btn-background-job').onclick = hideJobWindow;
+  renderJobWindow();
 }
 
-function closeJob() {
+function hideJobWindow() {
+  state.watching = null;
   $('#job-overlay').hidden = true;
-  clearTimeout(state.pollTimer);
 }
 
-function pollJob(jobId, onDone) {
+/* --- boucle unique de surveillance ------------------------------------- */
+function startJobWatcher() {
+  if (state.jobTicker) return;
+  state.jobTicker = setInterval(() => {
+    renderJobWindow();
+    renderDock();
+  }, 500);
+  pollJobs();
+}
+
+function stopJobWatcher() {
+  clearInterval(state.jobTicker);
+  state.jobTicker = null;
   clearTimeout(state.pollTimer);
-  const tick = async () => {
+  state.pollTimer = null;
+}
+
+async function pollJobs() {
+  clearTimeout(state.pollTimer);
+  const ids = [...state.jobs.keys()];
+  if (!ids.length) { stopJobWatcher(); renderDock(); return; }
+
+  await Promise.all(ids.map(async (id) => {
+    const entry = state.jobs.get(id);
+    if (!entry) return;
     let job;
     try {
-      job = await api(`/api/jobs/${jobId}`);
-    } catch (err) {
-      closeJob(); toast(err.message, 'err'); return;
+      job = await api(`/api/jobs/${id}`);
+    } catch {
+      state.jobs.delete(id);
+      return;
     }
-    $('#job-bar').style.width = `${(job.progress * 100).toFixed(1)}%`;
-    $('#job-label').textContent = job.label || '…';
-    $('#job-steps').innerHTML = (job.steps || []).slice(-8).map((s) => `<div>${escapeHtml(s.label)}</div>`).join('');
-    if (job.status === 'done') { closeJob(); onDone?.(job.result); return; }
-    if (job.status === 'error') { closeJob(); toast(job.error || 'Échec de la tâche.', 'err'); return; }
-    if (job.status === 'cancelled') { closeJob(); toast('Tâche annulée.'); return; }
-    state.pollTimer = setTimeout(tick, 600);
-  };
-  tick();
+    if (job.progress > entry.lastProgress + 0.0005) {
+      entry.lastProgress = job.progress;
+      entry.lastMove = Date.now();
+      entry.samples.push({ at: Date.now(), p: job.progress });
+      if (entry.samples.length > 30) entry.samples.shift();
+    }
+    entry.snapshot = job;
+
+    if (['done', 'error', 'cancelled'].includes(job.status)) {
+      state.jobs.delete(id);
+      if (state.watching === id) hideJobWindow();
+      finishJob(entry, job);
+    }
+  }));
+
+  renderJobWindow();
+  renderDock();
+  if (state.jobs.size) state.pollTimer = setTimeout(pollJobs, 700);
+  else stopJobWatcher();
+}
+
+function finishJob(entry, job) {
+  if (job.status === 'done') {
+    entry.onDone?.(job.result);
+  } else if (job.status === 'error') {
+    toast(`${entry.title} — ${job.error || 'échec'}`, 'err');
+  } else {
+    toast(`${entry.title} — annulé`);
+  }
+}
+
+/* --- estimation du temps restant --------------------------------------- */
+function estimateRemaining(entry) {
+  if (!entry || entry.samples.length < 2) return null;
+  // On se cale sur les dernieres mesures: le chargement du modele au debut
+  // n'est pas representatif du rythme reel.
+  const recent = entry.samples.slice(-8);
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const dp = last.p - first.p;
+  const dt = (last.at - first.at) / 1000;
+  if (dp <= 0.004 || dt <= 0) return null;
+  const remaining = (1 - last.p) * (dt / dp) - (Date.now() - last.at) / 1000;
+  if (!Number.isFinite(remaining) || remaining < 1 || remaining > 6 * 3600) return null;
+  return Math.max(0, remaining);
+}
+
+function noteFor(job, elapsed) {
+  const label = (job.label || '').toLowerCase();
+  if (label.includes('téléchargement du modèle')) {
+    return 'Premier lancement avec ce modèle : il se télécharge une seule fois, '
+      + 'ensuite il est réutilisé instantanément.';
+  }
+  if (label.includes('modèle') && elapsed > 20) {
+    return 'Le modèle de transcription se met en place. Cette étape ne montre pas '
+      + "d'avancement, c'est normal.";
+  }
+  if (label.includes('theora') || label.includes('dub_video')) {
+    return "L'encodage de la vidéo est l'étape la plus lente : elle dépend de la "
+      + 'durée du clip, pas du nombre de répliques.';
+  }
+  if (job.kind === 'setup-demucs' && elapsed > 20) {
+    return "PyTorch pèse environ 2 Go : laisse tourner, il n'y a rien à faire.";
+  }
+  if (job.status === 'queued') {
+    return 'Cette tâche démarrera dès que la précédente sera terminée. '
+      + 'Les tâches lourdes se font une par une pour ne pas se ralentir entre elles.';
+  }
+  return null;
+}
+
+/* --- rendu -------------------------------------------------------------- */
+function renderJobWindow() {
+  if (!state.watching) return;
+  const entry = state.jobs.get(state.watching);
+  if (!entry) { hideJobWindow(); return; }
+  const job = entry.snapshot || {};
+  const queued = job.status === 'queued';
+  const elapsed = (Date.now() - entry.started) / 1000;
+  const stalled = (Date.now() - entry.lastMove) / 1000 > 6;
+
+  const bar = $('#job-bar');
+  const waiting = queued || (stalled && entry.lastProgress < 0.995);
+  bar.classList.toggle('waiting', waiting);
+  if (!waiting) bar.style.width = `${((job.progress || 0) * 100).toFixed(1)}%`;
+
+  $('#job-pct').textContent = queued
+    ? 'en attente'
+    : `${Math.round((job.progress || 0) * 100)} %`;
+
+  let time = `écoulé ${clock(elapsed)}`;
+  const eta = queued ? null : estimateRemaining(entry);
+  if (eta !== null) time += ` · restant ~${clock(eta)}`;
+  else if (!queued && stalled) time += ' · en cours…';
+  $('#job-time').textContent = time;
+
+  $('#job-label').textContent = job.label || '…';
+  const note = noteFor(job, elapsed);
+  $('#job-note').hidden = !note;
+  if (note) $('#job-note').textContent = note;
+  $('#job-steps').innerHTML = (job.steps || []).slice(-8)
+    .map((s) => `<div>${escapeHtml(s.label)}</div>`).join('');
+}
+
+function renderDock() {
+  const dock = $('#job-dock');
+  const entries = [...state.jobs.values()]
+    .filter((e) => e.id !== state.watching)
+    .sort((a, b) => a.started - b.started);
+  if (!entries.length) { dock.hidden = true; dock.innerHTML = ''; return; }
+  dock.hidden = false;
+
+  dock.innerHTML = entries.map((entry) => {
+    const job = entry.snapshot || {};
+    const queued = job.status === 'queued';
+    const elapsed = (Date.now() - entry.started) / 1000;
+    const stalled = (Date.now() - entry.lastMove) / 1000 > 6;
+    const waiting = queued || (stalled && entry.lastProgress < 0.995);
+    const eta = queued ? null : estimateRemaining(entry);
+    const right = queued ? 'en attente'
+      : `${Math.round((job.progress || 0) * 100)} %`;
+    const time = eta !== null ? `${clock(elapsed)} · ~${clock(eta)} restant`
+      : `${clock(elapsed)}`;
+    return `<div class="dock-item ${queued ? 'queued' : ''}" data-id="${entry.id}"
+                 title="Cliquer pour voir le détail">
+      <div class="dock-top">
+        <span class="spinner sm"></span>
+        <span class="dock-title">${escapeHtml(entry.title)}</span>
+        <span class="dock-pct">${escapeHtml(right)}</span>
+      </div>
+      <div class="dock-bar"><div class="dock-fill ${waiting ? 'waiting' : ''}"
+           style="width:${((job.progress || 0) * 100).toFixed(1)}%"></div></div>
+      <div class="dock-label">${escapeHtml(job.label || '…')} — ${escapeHtml(time)}</div>
+    </div>`;
+  }).join('');
+
+  $$('.dock-item', dock).forEach((item) => item.addEventListener('click',
+    () => showJobWindow(item.dataset.id)));
 }
 
 /* ---------------------------------------------------------------- écrans */
@@ -257,8 +466,10 @@ async function openProject(id) {
   renderTimeline();
   refreshBacking();
   validate();
-  if (project._job && ['running', 'pending'].includes(project._job.status)) {
-    openJob(project._job, 'Traitement en cours', () => openProject(id));
+  const running = project._job;
+  if (running && ['running', 'queued'].includes(running.status)
+      && !state.jobs.has(running.id)) {
+    trackJob(running, running.title || 'Traitement en cours', () => openProject(id));
   }
 }
 
@@ -736,7 +947,11 @@ function setupExport() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      openJob(res.job, 'Export du dub pack', (result) => showExportResult(result));
+      // On fige le projet concerne: l'utilisateur peut avoir navigue ailleurs
+      // avant la fin de l'export.
+      const projectId = state.project.id;
+      openJob(res.job, res.job.title || 'Export du dub pack',
+        (result) => showExportResult(result, projectId));
     } catch (err) {
       toast(err.message, 'err');
     }
@@ -756,7 +971,11 @@ function setupExport() {
           keep_names: true,
         }),
       });
-      openJob(res.job, 'Nouvelle transcription', () => openProject(state.project.id));
+      const projectId = state.project.id;
+      openJob(res.job, res.job.title || 'Nouvelle transcription', () => {
+        if (state.project?.id === projectId) openProject(projectId);
+        else toast('Nouvelle transcription terminée.', 'ok');
+      });
     } catch (err) {
       toast(err.message, 'err');
     }
@@ -786,9 +1005,14 @@ async function runBacking(mode) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode }),
     });
+    const projectId = state.project.id;
     openJob(res.job, mode === 'demucs' ? 'Séparation des voix' : 'Préparation du fond sonore',
       async () => {
-        state.project = await api(`/api/projects/${state.project.id}`);
+        if (state.project?.id !== projectId) {
+          toast('Fond sonore prêt.', 'ok');
+          return;
+        }
+        state.project = await api(`/api/projects/${projectId}`);
         refreshBacking();
         toast('Fond sonore prêt.', 'ok');
       });
@@ -797,7 +1021,15 @@ async function runBacking(mode) {
   }
 }
 
-function showExportResult(result) {
+function showExportResult(result, projectId) {
+  projectId = projectId || state.project?.id;
+  if (state.project?.id !== projectId) {
+    // L'utilisateur regarde un autre projet: on se contente de le prevenir.
+    toast(result.destination === 'game'
+      ? `Pack installé dans le jeu : ${result.pack_name}`
+      : `Pack exporté : ${result.pack_name}`, 'ok');
+    return;
+  }
   const box = $('#export-result');
   box.hidden = false;
   const installed = result.destination === 'game';
@@ -825,7 +1057,7 @@ function showExportResult(result) {
     </div>
     ${steps}`;
   $('#btn-reveal').addEventListener('click', () =>
-    api(`/api/projects/${state.project.id}/reveal`, { method: 'POST' }).catch((e) => toast(e.message, 'err')));
+    api(`/api/projects/${projectId}/reveal`, { method: 'POST' }).catch((e) => toast(e.message, 'err')));
   toast(installed ? 'Pack installé dans le jeu.' : 'Export terminé.', 'ok');
 }
 
@@ -1107,6 +1339,27 @@ function setupDestination() {
     saveSettings({ make_zip: $('#opt-makezip').checked }));
 }
 
+/* --- reprise des taches deja en cours ---------------------------------- */
+async function adoptRunningJobs() {
+  /* Le serveur garde ses taches en cours meme si la page est rechargee ou
+     fermee. Au demarrage on les recupere pour que le suivi reapparaisse. */
+  try {
+    const { jobs } = await api('/api/jobs');
+    for (const job of jobs) {
+      if (state.jobs.has(job.id)) continue;
+      const onDone = job.project_id && job.kind === 'import'
+        ? () => { loadProjects(); toast(`« ${job.title} » est prêt.`, 'ok'); }
+        : job.project_id && !job.project_id.startsWith('_')
+          ? () => { if (state.project?.id === job.project_id) openProject(job.project_id); }
+          : null;
+      trackJob(job, job.title, onDone);
+    }
+    if (jobs.length) {
+      toast(`${jobs.length} tâche(s) déjà en cours, suivi repris.`);
+    }
+  } catch { /* pas bloquant */ }
+}
+
 /* ------------------------------------------------------------------ init */
 (async function init() {
   setupHome();
@@ -1122,5 +1375,6 @@ function setupDestination() {
     toast(`Serveur injoignable : ${err.message}`, 'err');
   }
   await loadProjects();
+  await adoptRunningJobs();
   window.addEventListener('beforeunload', () => { if (state.saveTimer) save(); });
 })();

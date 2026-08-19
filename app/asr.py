@@ -33,6 +33,41 @@ class Line:
     confidence: float = 1.0
 
 
+# Poids approximatifs, pour prevenir avant un long telechargement.
+MODEL_SIZES = {
+    "tiny": "75 Mo", "base": "145 Mo", "small": "480 Mo",
+    "medium": "1,5 Go", "large-v3": "3 Go", "large-v3-turbo": "1,6 Go",
+}
+
+
+def model_cached(model_name: str) -> bool:
+    """Le modèle est-il déjà téléchargé ?
+
+    Sert à annoncer honnêtement l'attente: le premier chargement télécharge
+    plusieurs centaines de Mo, les suivants sont quasi instantanés.
+    """
+    root = CACHE_DIR / "models"
+    if not root.is_dir():
+        return False
+    needle = model_name.replace(".", "").lower()
+    for entry in root.iterdir():
+        name = entry.name.lower()
+        if not entry.is_dir() or "whisper" not in name:
+            continue
+        if name.endswith(needle) or f"-{needle}" in name or needle in name:
+            # Un dossier de snapshot vide signifie un telechargement interrompu.
+            if any(entry.rglob("*.bin")) or any(entry.rglob("*.safetensors")):
+                return True
+    return False
+
+
+def loading_label(model_name: str) -> str:
+    if model_cached(model_name):
+        return f"Chargement du modèle « {model_name} »"
+    size = MODEL_SIZES.get(model_name, "plusieurs centaines de Mo")
+    return f"Téléchargement du modèle « {model_name} » ({size}, une seule fois)"
+
+
 def available_engines() -> list[str]:
     engines = []
     if module_available("faster_whisper"):
@@ -66,7 +101,7 @@ def _transcribe_faster_whisper(audio: Path, model_name: str, language: str | Non
     from faster_whisper import WhisperModel
 
     if cb:
-        cb(0.02, f"Chargement du modèle Whisper « {model_name} »")
+        cb(0.02, loading_label(model_name))
     # int8 sur CPU: le meilleur compromis vitesse/qualité sur Windows comme sur Mac.
     model = WhisperModel(model_name, device="auto", compute_type="int8",
                          download_root=str(CACHE_DIR / "models"))
@@ -129,7 +164,7 @@ def _transcribe_openai_whisper(audio: Path, model_name: str, language: str | Non
     import whisper
 
     if cb:
-        cb(0.05, f"Chargement du modèle Whisper « {model_name} »")
+        cb(0.05, loading_label(model_name))
     model = whisper.load_model(model_name, download_root=str(CACHE_DIR / "models"))
     result = model.transcribe(str(audio), word_timestamps=True, language=language or None)
     lines = []
