@@ -13,7 +13,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import asr, dubpack, gamedir, media, picker, pipeline, separate, sources
-from .config import (DEFAULT_MODEL, PROJECTS_DIR, WEB_DIR, capabilities)
+from .config import module_available
+from .config import (DEFAULT_MODEL, PROJECTS_DIR, ROOT, WEB_DIR, capabilities,
+                     diagnose, reset_tool_cache)
 from .jobs import manager
 
 app = FastAPI(title="DubPack Creator", docs_url=None, redoc_url=None)
@@ -50,6 +52,111 @@ def get_capabilities() -> dict:
     # find_spec ne suffit pas pour tkinter: l'extension C peut manquer.
     caps["picker"] = picker.available()
     return caps
+
+
+@app.get("/api/diagnostics")
+def api_diagnostics() -> dict:
+    """Rapport detaille pour le panneau de diagnostic."""
+    report = diagnose()
+    report["asr_engines"] = asr.available_engines()
+    report["demucs"] = separate.available()
+    report["embeddings"] = module_available("speechbrain")
+    report["picker"] = picker.available()
+    report["python"] = sys.version.split()[0]
+    report["python_exe"] = sys.executable
+    return report
+
+
+@app.post("/api/setup/ffmpeg")
+def api_setup_ffmpeg() -> dict:
+    """Telecharge et installe ffmpeg dans bin/ (Windows)."""
+    if manager.active_for("_setup"):
+        raise HTTPException(status_code=409, detail="Une installation est deja en cours.")
+    job = manager.create("setup-ffmpeg", "_setup")
+
+    def work(job_ref, progress):
+        progress(0.02, "Telechargement de ffmpeg (environ 110 Mo)")
+        script = ROOT / "tools" / "setup_ffmpeg.py"
+        proc = subprocess.Popen(
+            [sys.executable, str(script), "--force"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, errors="replace",
+            **({"creationflags": 0x08000000} if os.name == "nt" else {}),
+        )
+        last = ""
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            last = line
+            # setup_ffmpeg.py affiche une barre "[####] 42%"
+            if "%" in line:
+                digits = "".join(c for c in line.split("%")[0][-4:] if c.isdigit())
+                if digits:
+                    progress(0.02 + 0.9 * min(int(digits), 100) / 100,
+                             "Telechargement de ffmpeg")
+            else:
+                progress(job_ref.progress, line[:90])
+        proc.wait()
+        reset_tool_cache()
+        caps = capabilities()
+        if proc.returncode != 0 or not caps["ffmpeg"]:
+            raise RuntimeError(
+                f"L'installation de ffmpeg a echoue. Derniere ligne: {last or 'aucune'}"
+            )
+        progress(1.0, "ffmpeg installe")
+        return {"ffmpeg": caps["ffmpeg"], "theora": caps["theora"],
+                "vorbis": caps["vorbis"]}
+
+    manager.run(job, work)
+    return {"job": job.to_dict()}
+
+
+@app.post("/api/setup/extras")
+def api_setup_extras(payload: dict = Body(default={})) -> dict:
+    """Installe les modules optionnels: Demucs et/ou empreintes vocales ECAPA."""
+    which = payload.get("which") or "demucs"
+    packages = {
+        "demucs": ["demucs>=4.0.1"],
+        "embeddings": ["speechbrain>=1.0.0"],
+        "both": ["demucs>=4.0.1", "speechbrain>=1.0.0"],
+    }.get(which)
+    if not packages:
+        raise HTTPException(status_code=400, detail="Module inconnu.")
+    if manager.active_for("_setup"):
+        raise HTTPException(status_code=409, detail="Une installation est deja en cours.")
+    job = manager.create(f"setup-{which}", "_setup")
+
+    def work(job_ref, progress):
+        progress(0.03, "Telechargement de PyTorch et des modules (environ 2 Go)")
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", *packages],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, errors="replace",
+            **({"creationflags": 0x08000000} if os.name == "nt" else {}),
+        )
+        assert proc.stdout is not None
+        seen, last = 0, ""
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            last = line
+            if line.startswith(("Collecting", "Downloading", "Installing", "Using cached")):
+                seen += 1
+                # pip ne donne pas d'avancement global: on progresse par etapes vues.
+                progress(min(0.03 + seen * 0.02, 0.95), line[:90])
+        proc.wait()
+        if proc.returncode != 0:
+            raise RuntimeError(f"pip a echoue. Derniere ligne: {last or 'aucune'}")
+        progress(1.0, "Modules installes")
+        return {"demucs": separate.available(),
+                "embeddings": module_available("speechbrain"),
+                "restart_needed": True}
+
+    manager.run(job, work)
+    return {"job": job.to_dict()}
 
 
 # ---------------------------------------------------------------------------

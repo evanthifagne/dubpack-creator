@@ -1,3 +1,3 @@
-"""DubPack Creator — création de dub packs pour Choicer Voicer."""
+"""DubPack Creator - creation de dub packs pour Choicer Voicer."""
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"

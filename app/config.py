@@ -54,9 +54,14 @@ def ffmpeg_path() -> str:
 
         return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception as exc:  # pragma: no cover - dépend de l'install
+        expected = BIN_DIR / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+        if os.name == "nt":
+            hint = ("Ouvre le diagnostic (clique sur le badge rouge en haut) puis "
+                    "« Installer ffmpeg » : le téléchargement est automatique.")
+        else:
+            hint = "Installe-le avec: brew install ffmpeg"
         raise RuntimeError(
-            "ffmpeg est introuvable. Installe-le (macOS: `brew install ffmpeg`, "
-            "Windows: https://www.gyan.dev/ffmpeg/builds/) ou place le binaire dans le dossier bin/."
+            f"ffmpeg est introuvable. Cherché ici: {expected} , puis dans le PATH. {hint}"
         ) from exc
 
 
@@ -119,6 +124,68 @@ def module_available(mod: str) -> bool:
         return importlib.util.find_spec(mod) is not None
     except Exception:
         return False
+
+
+def reset_tool_cache() -> None:
+    """Oublie les chemins mémorisés, après une installation de ffmpeg."""
+    for func in (_resolve_tool, ffmpeg_path, ffprobe_path, ffmpeg_encoders,
+                 yt_dlp_available):
+        func.cache_clear()
+
+
+def diagnose() -> dict:
+    """Rapport détaillé: où l'on a cherché chaque outil, et ce qu'on a trouvé.
+
+    Sert au panneau de diagnostic de l'interface: quand ffmpeg manque, on veut
+    savoir précisément quel chemin a été inspecté plutôt que deviner.
+    """
+    report: dict = {"platform": sys.platform, "os_name": os.name,
+                    "root": str(ROOT), "bin_dir": str(BIN_DIR), "tools": {}}
+
+    try:
+        report["bin_contents"] = sorted(p.name for p in BIN_DIR.iterdir()) if BIN_DIR.is_dir() else []
+    except OSError as exc:
+        report["bin_contents"] = [f"(illisible: {exc})"]
+
+    for name in ("ffmpeg", "ffprobe"):
+        exe = f"{name}.exe" if os.name == "nt" else name
+        local = BIN_DIR / exe
+        on_path = shutil.which(name)
+        report["tools"][name] = {
+            "expected_in_bin": str(local),
+            "found_in_bin": local.exists(),
+            "found_on_path": on_path,
+            "resolved": _resolve_tool(name),
+        }
+
+    # Repli pip: pratique, mais souvent sans libtheora.
+    fallback: dict = {"installed": module_available("imageio_ffmpeg")}
+    if fallback["installed"]:
+        try:
+            import imageio_ffmpeg
+
+            fallback["binary"] = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception as exc:
+            fallback["binary"] = None
+            fallback["error"] = str(exc)
+    report["imageio_ffmpeg"] = fallback
+
+    try:
+        report["ffmpeg_used"] = ffmpeg_path()
+        report["ffmpeg_error"] = None
+    except RuntimeError as exc:
+        report["ffmpeg_used"] = None
+        report["ffmpeg_error"] = str(exc)
+
+    encoders = ffmpeg_encoders() if report["ffmpeg_used"] else set()
+    report["encoders"] = {
+        "count": len(encoders),
+        "libtheora": "libtheora" in encoders,
+        "libvorbis": "libvorbis" in encoders,
+    }
+    report["yt_dlp"] = yt_dlp_available()
+    report["can_download_ffmpeg"] = os.name == "nt"
+    return report
 
 
 def capabilities() -> dict:

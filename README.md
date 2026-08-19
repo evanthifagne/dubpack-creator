@@ -214,12 +214,33 @@ certitude.
 
 Supprimer un projet depuis l'accueil (🗑) efface tout son dossier.
 
-## 10. En cas de problème
+## 10. Le panneau Diagnostic
+
+Bouton **Diagnostic** en haut à droite (ou clic sur les pastilles de couleur).
+Il montre, sans deviner : le chemin exact de ffmpeg utilisé, les encodeurs
+disponibles, le contenu du dossier `bin/`, le repli `imageio-ffmpeg`, le moteur
+de transcription, Demucs, le sélecteur de dossier, la version de Python.
+
+Quand quelque chose manque, il propose la réparation :
+
+- **Installer ffmpeg automatiquement** (Windows) — télécharge la bonne build et
+  la place dans `bin/`, sans redémarrer l'outil ;
+- **Installer Demucs** — pour le fond sonore, ~2 Go, nécessite un redémarrage.
+
+Si ffmpeg manque au démarrage, ce panneau s'ouvre tout seul.
+
+> **Antivirus** : si ffmpeg disparaît de `bin/` après installation, c'est
+> presque toujours une mise en quarantaine — un gros exécutable non signé est un
+> faux positif classique. Autorise le dossier `bin/` de l'outil.
+
+## 11. En cas de problème
 
 | Symptôme | Cause probable |
 |---|---|
 | Badge **ffmpeg** rouge | ffmpeg absent du PATH → l'installer, ou déposer le binaire dans `bin/` |
-| Badge **Theora** rouge | build ffmpeg sans `libtheora` → prendre une build *full* |
+| Badge **Theora** rouge | build ffmpeg incomplète → Diagnostic → « Installer ffmpeg automatiquement » |
+| « ffmpeg n'est pas installé » | Diagnostic → « Installer ffmpeg automatiquement ». Si ça échoue, l'antivirus a probablement mis `bin/ffmpeg.exe` en quarantaine |
+| **Demucs absent** dans le bandeau | normal, c'est facultatif : Diagnostic → « Installer Demucs » si tu veux le fond sonore |
 | « Aucune parole détectée » | vidéo sans dialogues, ou mauvaise langue forcée → réessaie en détection automatique ou avec un modèle plus grand |
 | Transcription lente | normal en CPU : commence par `tiny`/`base` pour dégrossir, puis repasse en `small`/`medium` |
 | Le pack n'apparaît pas dans le jeu | un dossier en trop dans `packs_voice`, ou `dub_video.ogv` manquant |
@@ -228,7 +249,7 @@ Supprimer un projet depuis l'accueil (🗑) efface tout son dossier.
 | Un lien vidéo échoue | `pip install -U yt-dlp` dans `.venv` : les sites changent souvent |
 | Le port est déjà pris | l'outil en choisit un autre automatiquement — lis l'URL affichée dans la console |
 
-## 11. Notes
+## 12. Notes
 
 Le format de pack implémenté ici suit la documentation publique de *The Choicer
 Voicer* (dossier dans `packs_voice`, `dub_video.ogv` obligatoire,

@@ -78,7 +78,11 @@ async function loadCaps() {
       btn.title = note;
     });
   }
-  if (!c.ffmpeg) toast(c.ffmpeg_error || 'ffmpeg est introuvable.', 'err');
+  if (!c.ffmpeg) {
+    toast(c.ffmpeg_error || 'ffmpeg est introuvable.', 'err');
+    // Sans ffmpeg rien ne marche: on montre directement quoi faire.
+    setTimeout(openDiagnostics, 400);
+  }
   if (!c.asr_engines.length) toast('Aucun moteur de transcription installé (pip install faster-whisper).', 'err');
   else if (!c.theora) toast("ffmpeg n'a pas libtheora : l'export vidéo échouera.", 'err');
 }
@@ -825,6 +829,129 @@ function showExportResult(result) {
   toast(installed ? 'Pack installé dans le jeu.' : 'Export terminé.', 'ok');
 }
 
+/* ----------------------------------------------------------- diagnostic */
+const flag = (value, okText, noText, warn = false) => value
+  ? `<span class="diag-val ok">${escapeHtml(okText)}</span>`
+  : `<span class="diag-val ${warn ? 'warn' : 'no'}">${escapeHtml(noText)}</span>`;
+
+function diagRow(key, valueHtml) {
+  return `<div class="diag-row"><span class="diag-key">${escapeHtml(key)}</span>${valueHtml}</div>`;
+}
+
+async function openDiagnostics() {
+  $('#diag-overlay').hidden = false;
+  $('#diag-body').innerHTML = '<p class="muted">Analyse…</p>';
+  let d;
+  try {
+    d = await api('/api/diagnostics');
+  } catch (err) {
+    $('#diag-body').innerHTML = `<p class="diag-val no">${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  state.diag = d;
+
+  const fixes = [];
+  if (!d.ffmpeg_used || !d.encoders.libtheora) {
+    const missing = !d.ffmpeg_used ? 'ffmpeg est introuvable' : "ffmpeg n'a pas l'encodeur Theora";
+    fixes.push(`<div class="diag-fix">
+      <h3>${missing}</h3>
+      <p>Sans lui, impossible de produire <code>dub_video.ogv</code>, le fichier vidéo
+         que le jeu exige. ${d.can_download_ffmpeg
+           ? 'Le bouton ci-dessous télécharge la bonne version (environ 110 Mo) et la place dans <code>bin\\</code>.'
+           : 'Sur macOS : <code>brew install ffmpeg</code> puis relance l\'outil.'}</p>
+      ${d.can_download_ffmpeg
+        ? '<button class="btn btn-primary" id="btn-fix-ffmpeg">Installer ffmpeg automatiquement</button>'
+        : ''}
+    </div>`);
+  }
+  if (!d.demucs) {
+    fixes.push(`<div class="diag-fix">
+      <h3>Demucs n'est pas installé (facultatif)</h3>
+      <p>Demucs sépare les voix de la musique pour produire un
+         <code>_backing_track.ogg</code> : ta voix se pose alors sur la bande-son
+         d'origine, sans les dialogues. Sans lui, tout le reste fonctionne —
+         tu peux aussi utiliser l'audio d'origine tel quel.
+         Téléchargement d'environ 2 Go (PyTorch).</p>
+      <button class="btn btn-ghost" id="btn-fix-demucs">Installer Demucs</button>
+    </div>`);
+  }
+  if (!d.asr_engines.length) {
+    fixes.push(`<div class="diag-fix">
+      <h3>Aucun moteur de transcription</h3>
+      <p>Relance <code>INSTALLER.bat</code> : l'installation des dépendances a échoué.</p>
+    </div>`);
+  }
+  if (!fixes.length) {
+    fixes.push('<div class="diag-fix"><h3>Tout est en ordre</h3>'
+      + '<p>ffmpeg, Theora et la transcription répondent. Rien à réparer.</p></div>');
+  }
+
+  const rows = [
+    diagRow('ffmpeg utilisé', flag(d.ffmpeg_used, d.ffmpeg_used || '', d.ffmpeg_error || 'introuvable')),
+    diagRow('encodeur Theora', flag(d.encoders.libtheora, 'présent', 'ABSENT - export vidéo impossible')),
+    diagRow('encodeur Vorbis', flag(d.encoders.libvorbis, 'présent', 'absent')),
+    diagRow('ffprobe', flag(d.tools.ffprobe.resolved, d.tools.ffprobe.resolved || '', 'absent (optionnel)', true)),
+    diagRow('dossier bin', `<span class="diag-val">${escapeHtml(d.bin_dir)}</span>`),
+    diagRow('contenu de bin', d.bin_contents.length
+      ? `<span class="diag-val">${escapeHtml(d.bin_contents.join(', '))}</span>`
+      : '<span class="diag-val warn">vide</span>'),
+    diagRow('ffmpeg attendu dans bin', flag(d.tools.ffmpeg.found_in_bin,
+      d.tools.ffmpeg.expected_in_bin, `absent : ${d.tools.ffmpeg.expected_in_bin}`, true)),
+    diagRow('ffmpeg dans le PATH', flag(d.tools.ffmpeg.found_on_path,
+      d.tools.ffmpeg.found_on_path || '', 'non', true)),
+    diagRow('repli imageio-ffmpeg', flag(d.imageio_ffmpeg.binary,
+      d.imageio_ffmpeg.binary || '', d.imageio_ffmpeg.error || 'indisponible', true)),
+    diagRow('transcription', flag(d.asr_engines.length, d.asr_engines.join(', '), 'ABSENTE')),
+    diagRow('liens vidéo (yt-dlp)', flag(d.yt_dlp, 'prêt', 'absent')),
+    diagRow('Demucs (fond sonore)', flag(d.demucs, 'installé', 'non installé (facultatif)', true)),
+    diagRow('empreintes ECAPA', flag(d.embeddings, 'installées', 'non installées (facultatif)', true)),
+    diagRow('sélecteur de dossier', flag(d.picker, 'disponible', 'indisponible - colle les chemins', true)),
+    diagRow('Python', `<span class="diag-val">${escapeHtml(d.python)} — ${escapeHtml(d.python_exe)}</span>`),
+    diagRow('dossier de l\'outil', `<span class="diag-val">${escapeHtml(d.root)}</span>`),
+  ].join('');
+
+  $('#diag-body').innerHTML = fixes.join('') + rows;
+
+  $('#btn-fix-ffmpeg')?.addEventListener('click', () => runSetup('/api/setup/ffmpeg', {},
+    'Installation de ffmpeg'));
+  $('#btn-fix-demucs')?.addEventListener('click', () => runSetup('/api/setup/extras',
+    { which: 'demucs' }, 'Installation de Demucs'));
+}
+
+async function runSetup(path, body, title) {
+  try {
+    const res = await api(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    $('#diag-overlay').hidden = true;
+    openJob(res.job, title, async (result) => {
+      await loadCaps();
+      if (result?.restart_needed) {
+        toast('Installé. Ferme la fenêtre noire et relance DEMARRER.bat pour l\'activer.', 'ok');
+      } else {
+        toast('Installé.', 'ok');
+      }
+      openDiagnostics();
+    });
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+function setupDiagnostics() {
+  $('#btn-diag').addEventListener('click', openDiagnostics);
+  $('#caps').addEventListener('click', openDiagnostics);
+  $('#btn-diag-close').addEventListener('click', () => { $('#diag-overlay').hidden = true; });
+  $('#diag-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'diag-overlay') $('#diag-overlay').hidden = true;
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $('#diag-overlay').hidden = true;
+  });
+}
+
 /* ---------------------------------------------------------- destination */
 function currentDestination() {
   return $$('input[name="dest"]').find((r) => r.checked)?.value || 'zip';
@@ -987,6 +1114,7 @@ function setupDestination() {
   setupTimeline();
   setupExport();
   setupDestination();
+  setupDiagnostics();
   await loadSettings();
   try {
     await loadCaps();

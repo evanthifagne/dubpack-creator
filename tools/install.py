@@ -89,9 +89,18 @@ def main() -> int:
         result = subprocess.run(cmd)
         if result.returncode != 0:
             say()
-            say("  ffmpeg n'a pas pu être installé automatiquement.")
-            say("  Telecharge la build 'essentials' sur https://www.gyan.dev/ffmpeg/builds/")
-            say(f"  puis place ffmpeg.exe et ffprobe.exe dans : {ROOT / 'bin'}")
+            say("  !!  ffmpeg n'a pas pu etre installe automatiquement.")
+            say("  !!  Cause probable : reseau bloque, ou antivirus qui met le")
+            say("  !!  fichier en quarantaine (c'est un gros .exe non signe).")
+            say("  !!")
+            say("  !!  Deux solutions :")
+            say("  !!   - relance INSTALLER.bat (souvent suffisant), ou")
+            say("  !!   - dans l'outil, clique le bouton 'Diagnostic' en haut a")
+            say("  !!     droite puis 'Installer ffmpeg automatiquement'.")
+            say("  !!")
+            say("  !!  Sinon, telecharge la build 'essentials' sur")
+            say("  !!  https://www.gyan.dev/ffmpeg/builds/ et place ffmpeg.exe")
+            say(f"  !!  et ffprobe.exe dans : {ROOT / 'bin'}")
 
     step(4, total, "Vérification")
     check = subprocess.run(
@@ -116,6 +125,8 @@ def main() -> int:
     blocking = []
     if not caps["ffmpeg"]:
         blocking.append("ffmpeg")
+    elif "imageio_ffmpeg" in (caps["ffmpeg"] or ""):
+        say("  (ffmpeg de secours fourni par pip - suffisant, Theora inclus)")
     if not caps["theora"]:
         blocking.append("encodeur Theora")
     if not caps["asr_engines"]:

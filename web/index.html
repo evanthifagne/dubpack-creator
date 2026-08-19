@@ -18,7 +18,8 @@
     </div>
   </div>
   <div class="topbar-right">
-    <div id="caps" class="caps"></div>
+    <div id="caps" class="caps" title="Cliquer pour ouvrir le diagnostic"></div>
+    <button id="btn-diag" class="btn btn-ghost" title="Diagnostic et réparation">Diagnostic</button>
     <button id="btn-home" class="btn btn-ghost" hidden>← Mes projets</button>
   </div>
 </header>
@@ -257,6 +258,16 @@
     <p id="job-label" class="job-label"></p>
     <div id="job-steps" class="job-steps"></div>
     <button id="btn-cancel-job" class="btn btn-ghost">Annuler</button>
+  </div>
+</div>
+
+<div id="diag-overlay" class="overlay" hidden>
+  <div class="diag-card">
+    <div class="diag-head">
+      <h2>Diagnostic</h2>
+      <button id="btn-diag-close" class="btn btn-ghost">Fermer</button>
+    </div>
+    <div id="diag-body" class="diag-body"></div>
   </div>
 </div>
 

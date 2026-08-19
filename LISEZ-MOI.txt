@@ -47,15 +47,54 @@ TOUT SE PASSE SUR TON PC
   Les suivantes sont immediates.
 
 --------------------------------------------------------
+SI QUELQUE CHOSE NE MARCHE PAS
+
+  Clique sur le bouton "Diagnostic" en haut a droite de
+  l'outil (ou sur les pastilles de couleur a cote).
+
+  Il affiche exactement ce qui est trouve et ou :
+  le chemin de ffmpeg, les encodeurs presents, le contenu
+  du dossier bin, la transcription, Demucs...
+
+  Et surtout il propose de reparer en un clic :
+    - "Installer ffmpeg automatiquement"
+    - "Installer Demucs"
+
+  Copie-colle ce panneau si tu demandes de l'aide : il
+  contient tout ce qu'il faut pour comprendre le probleme.
+
+--------------------------------------------------------
+"DEMUCS ABSENT" DANS LE BANDEAU : C'EST NORMAL
+
+  Demucs est facultatif. Il sert uniquement a separer les
+  voix de la musique, pour que ta voix se pose sur la
+  bande-son d'origine sans les dialogues.
+
+  Tout le reste fonctionne sans lui, et tu peux aussi
+  utiliser l'audio d'origine tel quel (bouton "Utiliser
+  l'audio d'origine" dans l'onglet Export).
+
+  Pour l'installer : Diagnostic -> "Installer Demucs".
+  Compte environ 2 Go (PyTorch) et un redemarrage de
+  l'outil.
+
+--------------------------------------------------------
 PROBLEMES COURANTS
 
   "Python n'est pas installe"
       Installe-le depuis python.org en cochant
       "Add python.exe to PATH", puis relance INSTALLER.bat.
 
+  "ffmpeg n'est pas installe" / badge ffmpeg rouge
+      Diagnostic -> "Installer ffmpeg automatiquement".
+      Si ca echoue encore, ton antivirus met probablement
+      ffmpeg.exe en quarantaine : c'est un gros executable
+      non signe, c'est un faux positif classique. Autorise
+      le dossier bin\ de l'outil, puis reessaie.
+
   Badge "Theora" rouge dans l'outil
-      ffmpeg est incomplet. Relance :
-      INSTALLER.bat
+      ffmpeg est present mais incomplet.
+      Diagnostic -> "Installer ffmpeg automatiquement".
 
   Transcription lente
       Normal sur un PC sans carte graphique dediee.
