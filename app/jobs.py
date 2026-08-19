@@ -38,6 +38,7 @@ class Job:
     ended_at: float | None = None
     cancel_requested_at: float | None = None
     killed_processes: int = 0
+    error_detail: str | None = None   # trace technique, pour un rapport de bug
     steps: list[dict] = field(default_factory=list)
     _target: Callable | None = field(default=None, repr=False)
     _cancel: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -62,6 +63,7 @@ class Job:
                                if self.cancel_requested_at else None),
             "killed_processes": self.killed_processes,
             "processes": cancel.active_processes(self.id),
+            "error_detail": self.error_detail,
             "steps": self.steps[-40:],
         }
 
@@ -104,6 +106,10 @@ class JobManager:
              if j.project_id == project_id and j.status in {"queued", "running"}),
             None,
         )
+
+    def all_jobs(self) -> list[Job]:
+        with self._lock:
+            return list(self._jobs.values())
 
     def active(self) -> list[Job]:
         """Tâches en cours et en attente, dans l'ordre de passage."""
@@ -229,6 +235,9 @@ class JobManager:
                 job.status = "error"
                 job.error = clean_message(str(exc)) or exc.__class__.__name__
                 job.label = "Erreur"
+                # On garde la trace complète: sans elle, un rapport d'erreur
+                # ne dit rien et le problème n'est pas reproductible.
+                job.error_detail = _error_report(job, exc)
                 traceback.print_exc()
         finally:
             cancel.unbind()
@@ -236,6 +245,29 @@ class JobManager:
             job._target = None
             with self._lock:
                 self._renumber()
+
+
+def _error_report(job: Job, exc: BaseException) -> str:
+    """Rapport copiable: contexte, étapes franchies, puis trace technique."""
+    import platform
+    import sys
+
+    lines = [
+        f"tache      : {job.kind} — {job.title}",
+        f"projet     : {job.project_id}",
+        f"etape      : {job.steps[-1]['label'] if job.steps else '(aucune)'}",
+        f"avancement : {job.progress * 100:.0f}%",
+        f"duree      : {job.elapsed:.0f}s",
+        f"erreur     : {exc.__class__.__name__}: {clean_message(str(exc))}",
+        f"python     : {sys.version.split()[0]} sur {platform.system()} {platform.release()}",
+        "",
+        "etapes franchies :",
+        *[f"  - {s['label']}" for s in job.steps[-12:]],
+        "",
+        "trace technique :",
+        traceback.format_exc().strip(),
+    ]
+    return "\n".join(lines)[:6000]
 
 
 class JobCancelled(cancel.Cancelled):

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .config import CACHE_DIR, module_available
+from .config import CACHE_DIR, DEFAULT_MODEL, WHISPER_MODELS, module_available
 
 ProgressCb = Callable[[float, str], None] | None
 
@@ -36,7 +36,7 @@ class Line:
 # Poids approximatifs, pour prevenir avant un long telechargement.
 MODEL_SIZES = {
     "tiny": "75 Mo", "base": "145 Mo", "small": "480 Mo",
-    "medium": "1,5 Go", "large-v3": "3 Go", "large-v3-turbo": "1,6 Go",
+    "medium": "1,5 Go", "large-v3": "3,1 Go", "large-v3-turbo": "1,6 Go",
 }
 
 
@@ -66,6 +66,108 @@ def loading_label(model_name: str) -> str:
         return f"Chargement du modèle « {model_name} »"
     size = MODEL_SIZES.get(model_name, "plusieurs centaines de Mo")
     return f"Téléchargement du modèle « {model_name} » ({size}, une seule fois)"
+
+
+# Dépôts Hugging Face des modèles convertis pour faster-whisper.
+MODEL_REPOS = {
+    "tiny": "Systran/faster-whisper-tiny",
+    "base": "Systran/faster-whisper-base",
+    "small": "Systran/faster-whisper-small",
+    "medium": "Systran/faster-whisper-medium",
+    "large-v3": "Systran/faster-whisper-large-v3",
+    "large-v3-turbo": "deepdml/faster-whisper-large-v3-turbo-ct2",
+}
+
+MODEL_NOTES = {
+    "tiny": "Très rapide, qualité approximative. Pour dégrossir.",
+    "base": "Rapide. Correct sur un son net et bien articulé.",
+    "small": "Le bon compromis. Recommandé.",
+    "medium": "Nettement plus précis, environ trois fois plus lent.",
+    "large-v3": "Le plus précis. Lent sans carte graphique dédiée.",
+    "large-v3-turbo": "Précision proche de large-v3, beaucoup plus rapide.",
+}
+
+
+def _model_dir(model_name: str) -> Path | None:
+    """Dossier de cache du modèle, s'il est déjà téléchargé."""
+    root = CACHE_DIR / "models"
+    if not root.is_dir():
+        return None
+    needle = model_name.replace(".", "").lower()
+    best: Path | None = None
+    for entry in root.iterdir():
+        name = entry.name.lower()
+        if not entry.is_dir() or "whisper" not in name:
+            continue
+        if not (name.endswith(needle) or f"-{needle}" in name or needle in name):
+            continue
+        # Un dossier sans poids signifie un téléchargement interrompu.
+        if any(entry.rglob("*.bin")) or any(entry.rglob("*.safetensors")):
+            # On préfère la correspondance la plus précise (small vs large-v3).
+            if best is None or len(entry.name) < len(best.name):
+                best = entry
+    return best
+
+
+def model_disk_size(model_name: str) -> int:
+    """Taille réelle sur le disque.
+
+    Le cache Hugging Face range les poids dans `blobs/` et y renvoie depuis
+    `snapshots/` par des liens symboliques: suivre ces liens compterait chaque
+    fichier deux fois.
+    """
+    folder = _model_dir(model_name)
+    if not folder:
+        return 0
+    return sum(f.stat().st_size for f in folder.rglob("*")
+               if f.is_file() and not f.is_symlink())
+
+
+def model_catalog() -> list[dict]:
+    """État de chaque modèle: téléchargé ou non, taille, description."""
+    out = []
+    for name in WHISPER_MODELS:
+        folder = _model_dir(name)
+        size = model_disk_size(name) if folder else 0
+        out.append({
+            "name": name,
+            "cached": folder is not None,
+            "path": str(folder) if folder else None,
+            "size_on_disk": size,
+            "size_label": f"{size / 1048576:.0f} Mo" if size else MODEL_SIZES.get(name, "?"),
+            "expected": MODEL_SIZES.get(name, "?"),
+            "note": MODEL_NOTES.get(name, ""),
+            "repo": MODEL_REPOS.get(name),
+            "recommended": name == DEFAULT_MODEL,
+        })
+    return out
+
+
+def delete_partial_model(model_name: str) -> bool:
+    """Supprime un téléchargement inachevé (aucun fichier de poids présent)."""
+    import shutil
+
+    repo = MODEL_REPOS.get(model_name)
+    if not repo:
+        return False
+    folder = CACHE_DIR / "models" / ("models--" + repo.replace("/", "--"))
+    if not folder.is_dir():
+        return False
+    complete = any(folder.rglob("*.bin")) or any(folder.rglob("*.safetensors"))
+    if complete:
+        return False
+    shutil.rmtree(folder, ignore_errors=True)
+    return True
+
+
+def delete_model(model_name: str) -> bool:
+    import shutil
+
+    folder = _model_dir(model_name)
+    if not folder:
+        return False
+    shutil.rmtree(folder, ignore_errors=True)
+    return True
 
 
 def available_engines() -> list[str]:

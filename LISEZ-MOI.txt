@@ -47,6 +47,35 @@ TOUT SE PASSE SUR TON PC
   Les suivantes sont immediates.
 
 --------------------------------------------------------
+TELECHARGER LES MODELES A L'AVANCE
+
+  Sur l'accueil : "Modeles de transcription" -> "Gerer".
+
+  Chaque modele affiche sa taille et ce qu'il vaut :
+    tiny    75 Mo   tres rapide, approximatif
+    base   145 Mo   rapide, correct sur son net
+    small  480 Mo   RECOMMANDE, bon compromis
+    medium 1,5 Go   plus precis, 3x plus lent
+    large-v3   3,1 Go  le plus precis, lent
+    large-v3-turbo 1,6 Go  precis et rapide
+
+  Sans ca, le modele se telecharge au premier usage :
+  ca marche, c'est juste plus long a ce moment-la.
+
+--------------------------------------------------------
+SI UNE TACHE ECHOUE
+
+  Une fenetre s'ouvre avec le message, ce qu'il y a a
+  faire, et un repli "Details techniques".
+
+  Le bouton "Copier le rapport" met tout dans le
+  presse-papier : c'est ce qu'il faut coller pour
+  demander de l'aide.
+
+  Pour retrouver une erreur passee :
+  Diagnostic -> Dernieres taches -> voir le detail.
+
+--------------------------------------------------------
 PENDANT QUE CA TRAVAILLE
 
   La fenetre de suivi affiche l'avancement, le temps

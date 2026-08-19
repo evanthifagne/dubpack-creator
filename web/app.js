@@ -15,6 +15,7 @@ const state = {
   previewAudio: new Audio(),
   filter: '',
   settings: {},
+  models: [],
   jobs: new Map(),
   watching: null,
   jobTicker: null,
@@ -43,8 +44,18 @@ function toast(message, kind = '') {
 async function api(path, opts = {}) {
   const res = await fetch(path, opts);
   if (!res.ok) {
-    let detail = `Erreur ${res.status}`;
-    try { detail = (await res.json()).detail || detail; } catch { /* réponse non JSON */ }
+    // On veut toujours un message exploitable, meme quand le serveur ne
+    // repond pas en JSON: sans cela l'utilisateur voit "Erreur 500" et rien de plus.
+    let detail = `Erreur ${res.status} sur ${path}`;
+    try {
+      const body = await res.text();
+      try {
+        const parsed = JSON.parse(body);
+        detail = parsed.detail || parsed.message || body.slice(0, 500) || detail;
+      } catch {
+        if (body.trim()) detail = `${detail} — ${body.slice(0, 400)}`;
+      }
+    } catch { /* corps illisible */ }
     throw new Error(detail);
   }
   return res.status === 204 ? null : res.json();
@@ -90,6 +101,85 @@ async function loadCaps() {
   else if (!c.theora) toast("ffmpeg n'a pas libtheora : l'export vidéo échouera.", 'err');
 }
 
+/* ---------------------------------------------------------------- modèles */
+async function loadModels() {
+  try {
+    state.models = (await api('/api/models')).models;
+  } catch {
+    state.models = [];
+  }
+  renderModels();
+  refreshModelState();
+}
+
+function refreshModelState() {
+  /* Sous le selecteur: dire si le modele choisi est deja pret, et sinon ce que
+     son premier usage va couter en telechargement. */
+  const chosen = $('#set-model').value;
+  const model = state.models.find((m) => m.name === chosen);
+  const el = $('#model-state');
+  if (!model) {
+    el.textContent = 'Plus grand = plus précis, mais plus lent.';
+    return;
+  }
+  el.innerHTML = model.cached
+    ? `<span style="color:var(--ok)">✓ déjà téléchargé (${escapeHtml(model.size_label)})</span> — ${escapeHtml(model.note)}`
+    : `<span style="color:var(--warn)">à télécharger : ${escapeHtml(model.expected)}</span> au premier usage — ${escapeHtml(model.note)}`;
+}
+
+function renderModels() {
+  const box = $('#models-list');
+  if (!state.models.length) {
+    box.innerHTML = '<p class="muted small">Liste indisponible.</p>';
+    return;
+  }
+  box.innerHTML = state.models.map((m) => `
+    <div class="model-row ${m.cached ? 'cached' : ''}">
+      <div class="model-main">
+        <div class="model-name">${escapeHtml(m.name)}
+          ${m.recommended ? '<span class="tag reco">recommandé</span>' : ''}
+          ${m.cached ? '<span class="tag ok">prêt</span>' : ''}</div>
+        <div class="model-note">${escapeHtml(m.note)}</div>
+      </div>
+      <span class="model-size">${escapeHtml(m.cached ? m.size_label : m.expected)}</span>
+      ${m.cached
+        ? `<button class="btn btn-ghost" data-del="${escapeHtml(m.name)}">Supprimer</button>`
+        : `<button class="btn btn-primary" data-get="${escapeHtml(m.name)}">Télécharger</button>`}
+    </div>`).join('');
+
+  $$('[data-get]', box).forEach((btn) => btn.addEventListener('click', async () => {
+    const name = btn.dataset.get;
+    btn.disabled = true;
+    try {
+      const res = await api('/api/models/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: name }),
+      });
+      openJob(res.job, `Téléchargement du modèle ${name}`, async () => {
+        await loadModels();
+        toast(`Modèle ${name} prêt.`, 'ok');
+      });
+    } catch (err) {
+      toast(err.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  }));
+
+  $$('[data-del]', box).forEach((btn) => btn.addEventListener('click', async () => {
+    const name = btn.dataset.del;
+    if (!confirm(`Supprimer le modèle ${name} du disque ?`)) return;
+    try {
+      await api(`/api/models/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      await loadModels();
+      toast(`Modèle ${name} supprimé.`);
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+  }));
+}
+
 /* --------------------------------------------------------------- accueil */
 function settingsFromForm() {
   return {
@@ -132,6 +222,12 @@ function setupHome() {
     refreshCreateButton();
   });
   $('#btn-create').addEventListener('click', createProject);
+  $('#set-model').addEventListener('change', refreshModelState);
+  $('#btn-models-toggle').addEventListener('click', () => {
+    const box = $('#models-list');
+    box.hidden = !box.hidden;
+    $('#btn-models-toggle').textContent = box.hidden ? 'Gérer' : 'Masquer';
+  });
   $('#btn-home').addEventListener('click', () => showHome());
   refreshCreateButton();
 }
@@ -330,10 +426,52 @@ function finishJob(entry, job) {
   if (job.status === 'done') {
     entry.onDone?.(job.result);
   } else if (job.status === 'error') {
-    toast(`${entry.title} — ${job.error || 'échec'}`, 'err');
+    showJobError(entry, job);
   } else {
     toast(`${entry.title} — annulé`);
   }
+}
+
+// Pistes concretes selon le message: une erreur sans suite a donner ne sert a rien.
+const ERROR_HINTS = [
+  [/ffmpeg|theora|libvorbis/i, 'Ouvre le diagnostic : ffmpeg est probablement absent ou incomplet. Le bouton « Installer ffmpeg automatiquement » règle le cas le plus courant.'],
+  [/télécharger cette vidéo|yt-dlp|youtube/i, "YouTube a refusé le téléchargement. Mets yt-dlp à jour, ou télécharge la vidéo en .mp4 et dépose le fichier."],
+  [/aucune parole|no speech/i, "Aucune parole détectée : vérifie que la vidéo contient bien des dialogues, ou force la langue au lieu de la détection automatique."],
+  [/espace|disk|no space/i, "Le disque est probablement plein : les modèles et les vidéos prennent de la place."],
+  [/introuvable|not found|no such file/i, "Un fichier attendu a disparu. Si tu as annulé une tâche précédente, le projet est peut-être incomplet : supprime-le et recommence."],
+  [/mémoire|memory/i, 'Mémoire insuffisante : essaie un modèle plus petit (base ou small).'],
+  [/existe déjà/i, "Un pack du même nom est déjà en place : coche « Remplacer un pack du même nom » dans l'onglet Export."],
+];
+
+function showJobError(entry, job) {
+  const message = job.error || 'Échec sans message.';
+  $('#error-title').textContent = `${entry.title} — échec`;
+  $('#error-message').textContent = message;
+
+  const hint = ERROR_HINTS.find(([pattern]) => pattern.test(message))?.[1];
+  $('#error-hint').hidden = !hint;
+  if (hint) $('#error-hint').innerHTML = `<h3>Que faire</h3><p>${escapeHtml(hint)}</p>`;
+
+  const report = job.error_detail || `${entry.title}\n${message}`;
+  $('#error-pre').textContent = report;
+  $('#error-details').open = !hint;   // sans piste claire, on montre le detail
+  $('#error-overlay').hidden = false;
+
+  $('#btn-error-copy').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(report);
+      toast('Rapport copié. Tu peux le coller pour demander de l\'aide.', 'ok');
+    } catch {
+      // Le presse-papier peut etre refuse: on selectionne le texte a la place.
+      const range = document.createRange();
+      range.selectNodeContents($('#error-pre'));
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+      toast('Sélectionné : copie avec Ctrl+C.');
+    }
+  };
+  $('#btn-error-diag').onclick = () => { $('#error-overlay').hidden = true; openDiagnostics(); };
+  $('#btn-error-close').onclick = () => { $('#error-overlay').hidden = true; };
 }
 
 /* --- estimation du temps restant --------------------------------------- */
@@ -1174,12 +1312,46 @@ async function openDiagnostics() {
     diagRow('dossier de l\'outil', `<span class="diag-val">${escapeHtml(d.root)}</span>`),
   ].join('');
 
-  $('#diag-body').innerHTML = fixes.join('') + rows;
+  $('#diag-body').innerHTML = fixes.join('') + rows
+    + '<h3>Dernières tâches</h3><div id="diag-jobs" class="muted small">chargement…</div>';
+  renderRecentJobs();
 
   $('#btn-fix-ffmpeg')?.addEventListener('click', () => runSetup('/api/setup/ffmpeg', {},
     'Installation de ffmpeg'));
   $('#btn-fix-demucs')?.addEventListener('click', () => runSetup('/api/setup/extras',
     { which: 'demucs' }, 'Installation de Demucs'));
+}
+
+async function renderRecentJobs() {
+  /* Retrouver une erreur passee: le message a pu disparaitre de l'ecran. */
+  const box = $('#diag-jobs');
+  if (!box) return;
+  let jobs;
+  try {
+    jobs = (await api('/api/jobs/recent?limit=10')).jobs;
+  } catch {
+    box.textContent = 'Historique indisponible.';
+    return;
+  }
+  if (!jobs.length) {
+    box.textContent = 'Aucune tâche pour le moment.';
+    return;
+  }
+  const marks = { done: '✓', error: '✕', cancelled: '⊘', running: '…', queued: '·' };
+  box.innerHTML = jobs.map((j, i) => `<div class="diag-row">
+      <span class="diag-key">${marks[j.status] || '·'} ${escapeHtml(j.title || j.kind)}</span>
+      <span class="diag-val ${j.status === 'error' ? 'no' : j.status === 'done' ? 'ok' : ''}">
+        ${escapeHtml(j.status === 'error' ? (j.error || 'échec') : j.status)}
+        ${j.status === 'error' && j.error_detail
+          ? `<button class="link" data-report="${i}">voir le détail</button>` : ''}
+      </span>
+    </div>`).join('');
+
+  $$('[data-report]', box).forEach((btn) => btn.addEventListener('click', () => {
+    const job = jobs[Number(btn.dataset.report)];
+    $('#diag-overlay').hidden = true;
+    showJobError({ title: job.title || job.kind }, job);
+  }));
 }
 
 async function runSetup(path, body, title) {
@@ -1212,7 +1384,9 @@ function setupDiagnostics() {
     if (e.target.id === 'diag-overlay') $('#diag-overlay').hidden = true;
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') $('#diag-overlay').hidden = true;
+    if (e.key !== 'Escape') return;
+    $('#diag-overlay').hidden = true;
+    $('#error-overlay').hidden = true;
   });
 }
 
@@ -1407,6 +1581,7 @@ async function adoptRunningJobs() {
     toast(`Serveur injoignable : ${err.message}`, 'err');
   }
   await loadProjects();
+  await loadModels();
   await adoptRunningJobs();
   window.addEventListener('beforeunload', () => { if (state.saveTimer) save(); });
 })();

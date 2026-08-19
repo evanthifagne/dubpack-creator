@@ -59,6 +59,28 @@ Sur macOS, voir « Lancement » plus bas.
 Le reste (Whisper, yt-dlp, serveur web) s'installe tout seul au premier
 lancement, dans un environnement Python isolé (`.venv/`).
 
+## 1 bis. Télécharger les modèles à l'avance
+
+Sur l'accueil, section **Modèles de transcription** → **Gérer**. Chaque modèle
+indique sa taille, ce qu'il vaut, et s'il est déjà présent :
+
+| Modèle | Taille | Pour quoi |
+|---|---|---|
+| `tiny` | 75 Mo | Très rapide, qualité approximative. Pour dégrossir. |
+| `base` | 145 Mo | Rapide, correct sur un son net. |
+| `small` | 480 Mo | **Recommandé** — le bon compromis. |
+| `medium` | 1,5 Go | Nettement plus précis, environ 3× plus lent. |
+| `large-v3` | 3,1 Go | Le plus précis, lent sans carte graphique dédiée. |
+| `large-v3-turbo` | 1,6 Go | Précision proche de large-v3, beaucoup plus rapide. |
+
+Le téléchargement affiche sa progression et s'annule proprement (un
+téléchargement interrompu est nettoyé, pas laissé à moitié). Le bouton
+**Supprimer** libère l'espace disque.
+
+Sans cette étape, le modèle se télécharge tout seul au premier usage — c'est
+juste plus long à ce moment-là. Sous le sélecteur de modèle, l'outil indique
+toujours si celui que tu as choisi est déjà prêt ou reste à télécharger.
+
 ## 2. Lancement
 
 **macOS** — double-clique `start.command`
@@ -239,7 +261,20 @@ certitude.
 
 Supprimer un projet depuis l'accueil (🗑) efface tout son dossier.
 
-## 10. Le panneau Diagnostic
+## 10. Quand une tâche échoue
+
+Une fenêtre s'ouvre avec : le message, **ce qu'il y a à faire** quand la cause
+est reconnue (ffmpeg absent, refus de YouTube, disque plein, pack existant…), et
+un repli **Détails techniques** contenant le contexte complet — étape atteinte,
+avancement, durée, version de Python, et la trace de l'erreur.
+
+Le bouton **Copier le rapport** met tout ça dans le presse-papier : c'est ce
+qu'il faut coller pour demander de l'aide.
+
+Les erreurs restent consultables après coup : **Diagnostic → Dernières tâches**,
+puis « voir le détail ».
+
+## 11. Le panneau Diagnostic
 
 Bouton **Diagnostic** en haut à droite (ou clic sur les pastilles de couleur).
 Il montre, sans deviner : le chemin exact de ffmpeg utilisé, les encodeurs
@@ -258,7 +293,7 @@ Si ffmpeg manque au démarrage, ce panneau s'ouvre tout seul.
 > presque toujours une mise en quarantaine — un gros exécutable non signé est un
 > faux positif classique. Autorise le dossier `bin/` de l'outil.
 
-## 11. En cas de problème
+## 12. En cas de problème
 
 | Symptôme | Cause probable |
 |---|---|
@@ -275,7 +310,7 @@ Si ffmpeg manque au démarrage, ce panneau s'ouvre tout seul.
 | Un lien vidéo échoue | `pip install -U yt-dlp` dans `.venv` : les sites changent souvent |
 | Le port est déjà pris | l'outil en choisit un autre automatiquement — lis l'URL affichée dans la console |
 
-## 12. Notes
+## 13. Notes
 
 Le format de pack implémenté ici suit la documentation publique de *The Choicer
 Voicer* (dossier dans `packs_voice`, `dub_video.ogv` obligatoire,

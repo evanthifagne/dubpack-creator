@@ -141,6 +141,23 @@ textarea { resize: vertical; }
 .hero-actions { display: flex; align-items: center; gap: 14px; margin-top: 16px; flex-wrap: wrap; }
 .hint { color: var(--muted); font-size: 12.5px; }
 
+.models-list { display: grid; gap: 8px; margin-top: 12px; }
+.model-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2);
+}
+.model-row.cached { border-color: rgba(52, 211, 153, .35); }
+.model-main { flex: 1; min-width: 0; }
+.model-name { font-size: 13.5px; font-weight: 600; }
+.model-name .tag {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  padding: 1px 6px; border-radius: 99px; margin-left: 7px; vertical-align: 1px;
+}
+.tag.reco { background: rgba(249, 115, 22, .18); color: var(--accent-2); }
+.tag.ok { background: rgba(52, 211, 153, .16); color: var(--ok); }
+.model-note { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.model-size { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
 .project-list { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .project-card {
   display: flex; gap: 12px; align-items: center; text-align: left;
@@ -345,6 +362,17 @@ input.time { width: 66px; padding: 3px 5px; font-size: 12px; font-variant-numeri
 .dock-item.queued { opacity: .78; }
 .dock-item.queued .spinner { animation-play-state: paused; opacity: .45; }
 .spinner.sm { width: 13px; height: 13px; flex: 0 0 13px; border-width: 2px; }
+
+.error-message { font-size: 14px; color: #fecaca; margin: 4px 0 12px; line-height: 1.5; }
+#error-details { margin-top: 4px; }
+#error-details summary { cursor: pointer; font-size: 12.5px; color: var(--muted); padding: 4px 0; }
+#error-details summary:hover { color: var(--text); }
+#error-pre {
+  margin: 8px 0 0; padding: 11px; border-radius: 8px; background: var(--bg-2);
+  border: 1px solid var(--line); font-size: 11px; line-height: 1.45;
+  max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  color: var(--muted);
+}
 
 .toasts { position: fixed; bottom: 20px; right: 20px; display: grid; gap: 8px; z-index: 200; max-width: 420px; }
 .toast { padding: 11px 14px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 13px; animation: slide .25s; }

@@ -13,9 +13,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import asr, cancel, dubpack, gamedir, media, picker, pipeline, separate, sources
-from .config import module_available
 from .config import (DEFAULT_MODEL, PROJECTS_DIR, ROOT, WEB_DIR, capabilities,
-                     configure_environment, diagnose, reset_tool_cache)
+                     configure_environment, diagnose, module_available,
+                     reset_tool_cache)
 from .jobs import manager
 
 app = FastAPI(title="DubPack Creator", docs_url=None, redoc_url=None)
@@ -162,6 +162,79 @@ def api_setup_extras(payload: dict = Body(default={})) -> dict:
 
     manager.run(job, work)
     return {"job": job.to_dict()}
+
+
+@app.get("/api/models")
+def api_models() -> dict:
+    """Etat des modeles de transcription: telecharges, taille, description."""
+    return {"models": asr.model_catalog(), "default": DEFAULT_MODEL,
+            "cache": str(ROOT / ".cache" / "models")}
+
+
+@app.post("/api/models/download")
+def api_model_download(payload: dict = Body(...)) -> dict:
+    """Telecharge un modele a l'avance, pour ne pas attendre au premier usage."""
+    name = payload.get("model")
+    if name not in asr.MODEL_REPOS:
+        raise HTTPException(status_code=400, detail=f"Modele inconnu: {name}")
+    existing = manager.active_for("_models")
+    if existing:
+        raise HTTPException(status_code=409,
+                            detail="Un telechargement de modele est deja en cours.")
+    job = manager.create("model", "_models", title=f"Modele {name}")
+
+    def work(job_ref, progress):
+        progress(0.01, f"Telechargement du modele « {name} »")
+        script = ROOT / "tools" / "fetch_model.py"
+        proc = cancel.register(subprocess.Popen(
+            [sys.executable, str(script), name],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, errors="replace",
+            **({"creationflags": 0x08000000} if os.name == "nt" else {}),
+        ))
+        last = ""
+        assert proc.stdout is not None
+        try:
+            for line in proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith("PROGRESS "):
+                    try:
+                        pct = int(line.split()[1])
+                    except (IndexError, ValueError):
+                        continue
+                    progress(0.01 + 0.98 * pct / 100,
+                             f"Telechargement du modele « {name} » — {pct} %")
+                else:
+                    last = line
+            proc.wait()
+        finally:
+            cancel.unregister(proc)
+        if proc.returncode != 0:
+            # Un telechargement interrompu laisse un dossier incomplet: on le
+            # retire pour ne pas encombrer le disque avec des restes inutilisables.
+            asr.delete_partial_model(name)
+            if cancel.is_cancelled():
+                raise media.CancelledOperation()
+            raise RuntimeError(f"Le telechargement a echoue. {last}")
+        entry = next((m for m in asr.model_catalog() if m["name"] == name), None)
+        if not entry or not entry["cached"]:
+            asr.delete_partial_model(name)
+            raise RuntimeError("Le modele n'apparait pas dans le cache apres telechargement.")
+        progress(1.0, f"Modele « {name} » pret ({entry['size_label']})")
+        return {"model": name, "size": entry["size_label"]}
+
+    manager.run(job, work)
+    return {"job": job.to_dict()}
+
+
+@app.delete("/api/models/{name}")
+def api_model_delete(name: str) -> dict:
+    """Libere l'espace disque d'un modele."""
+    if name not in asr.MODEL_REPOS:
+        raise HTTPException(status_code=400, detail=f"Modele inconnu: {name}")
+    return {"deleted": asr.delete_model(name)}
 
 
 # ---------------------------------------------------------------------------
@@ -606,6 +679,13 @@ def api_pick_folder(payload: dict = Body(default={})) -> dict:
 def api_jobs() -> dict:
     """Taches en cours et en attente, pour le suivi en arriere-plan."""
     return {"jobs": [j.to_dict() for j in manager.active()]}
+
+
+@app.get("/api/jobs/recent")
+def api_recent_jobs(limit: int = 12) -> dict:
+    """Taches terminees recemment, erreurs comprises: sert au diagnostic."""
+    jobs = sorted(manager.all_jobs(), key=lambda j: j.created_at, reverse=True)
+    return {"jobs": [j.to_dict() for j in jobs[:max(1, min(limit, 40))]]}
 
 
 @app.get("/api/jobs/{job_id}")

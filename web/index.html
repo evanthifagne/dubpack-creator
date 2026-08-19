@@ -47,7 +47,7 @@
       <label>
         <span>Modèle Whisper</span>
         <select id="set-model"></select>
-        <small>Plus grand = plus précis, mais plus lent.</small>
+        <small id="model-state">Plus grand = plus précis, mais plus lent.</small>
       </label>
       <label>
         <span>Langue</span>
@@ -92,6 +92,16 @@
       <button id="btn-create" class="btn btn-primary btn-lg" disabled>Générer le dub pack</button>
       <span id="create-hint" class="hint">Ajoute d'abord un fichier ou un lien.</span>
     </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Modèles de transcription</h2>
+      <button id="btn-models-toggle" class="btn btn-ghost">Gérer</button>
+    </div>
+    <p class="muted small">Les modèles se téléchargent au premier usage. Tu peux les
+      récupérer à l'avance ici, pour ne pas attendre au moment de créer un pack.</p>
+    <div id="models-list" class="models-list" hidden></div>
   </section>
 
   <section class="panel">
@@ -282,6 +292,25 @@
       <button id="btn-diag-close" class="btn btn-ghost">Fermer</button>
     </div>
     <div id="diag-body" class="diag-body"></div>
+  </div>
+</div>
+
+<div id="error-overlay" class="overlay" hidden>
+  <div class="diag-card">
+    <div class="diag-head">
+      <h2 id="error-title">La tâche a échoué</h2>
+      <button id="btn-error-close" class="btn btn-ghost">Fermer</button>
+    </div>
+    <p id="error-message" class="error-message"></p>
+    <div id="error-hint" class="diag-fix" hidden></div>
+    <details id="error-details">
+      <summary>Détails techniques</summary>
+      <pre id="error-pre"></pre>
+    </details>
+    <div class="btn-row" style="margin-top:14px">
+      <button id="btn-error-copy" class="btn btn-primary">Copier le rapport</button>
+      <button id="btn-error-diag" class="btn btn-ghost">Ouvrir le diagnostic</button>
+    </div>
   </div>
 </div>
 
