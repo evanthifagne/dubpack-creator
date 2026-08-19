@@ -200,8 +200,8 @@ textarea { resize: vertical; }
 
 .timeline {
   position: relative; height: 104px; background: var(--bg-2);
-  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; cursor: pointer;
-  user-select: none;
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  user-select: none; touch-action: none;
 }
 #wave { position: absolute; inset: 0; width: 100%; height: 100%; }
 .tl-lines { position: absolute; inset: 0; }
@@ -221,6 +221,22 @@ textarea { resize: vertical; }
 }
 .tl-line.off { opacity: .28; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; pointer-events: none; box-shadow: 0 0 8px rgba(255, 255, 255, .7); }
+/* Poignee: rend le curseur visiblement saisissable. */
+.playhead-grip {
+  position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+  width: 11px; height: 11px; border-radius: 3px; background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+}
+.timeline { cursor: grab; }
+.timeline.scrubbing { cursor: grabbing; }
+.timeline.scrubbing .tl-line { pointer-events: none; }
+.tl-tip {
+  position: absolute; top: 4px; transform: translateX(-50%);
+  background: rgba(8, 10, 15, .92); border: 1px solid var(--line);
+  color: var(--text); font-size: 11px; font-variant-numeric: tabular-nums;
+  padding: 2px 6px; border-radius: 5px; pointer-events: none; z-index: 4;
+  white-space: nowrap;
+}
 
 /* ---------------------------------------------------------------- lines */
 .badge { background: var(--panel-2); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; font-size: 12px; color: var(--muted); }

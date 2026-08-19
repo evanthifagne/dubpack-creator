@@ -987,25 +987,107 @@ function renderTimeline() {
       ? `Son non parlé (${line.kind || 'son'}) — ${nameOf(line.speaker)}`
       : `${nameOf(line.speaker)} — ${line.text || ''}`;
     el.textContent = line.nonverbal ? (line.kind || 'son') : nameOf(line.speaker);
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      selectLine(line.id, true);
-      const node = $(`#lines .line[data-id="${line.id}"]`);
-      node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    });
     box.append(el);
   }
 }
 
 function setupTimeline() {
   const box = $('#timeline');
-  box.addEventListener('click', (e) => {
-    if (e.target.closest('.tl-line')) return;
-    const dur = state.project?.source?.duration || 0;
+  const video = $('#video');
+
+  const timeAt = (clientX) => {
+    const dur = state.project?.source?.duration || video.duration || 0;
     const rect = box.getBoundingClientRect();
-    $('#video').currentTime = ((e.clientX - rect.left) / rect.width) * dur;
+    const ratio = (clientX - rect.left) / rect.width;
+    // On borne: en glissant on sort volontiers du cadre.
+    return Math.max(0, Math.min(1, ratio)) * dur;
+  };
+
+  let drag = null;
+
+  box.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    // La capture du pointeur est un confort, pas une dependance: elle peut
+    // echouer. Le suivi reel se fait sur la fenetre, qui recoit les mouvements
+    // meme quand le pointeur sort de la timeline.
+    try { box.setPointerCapture(e.pointerId); } catch { /* sans importance */ }
+    drag = {
+      id: e.pointerId,
+      startX: e.clientX,
+      moved: false,
+      onLine: e.target.closest('.tl-line'),
+      wasPlaying: !video.paused,
+    };
+    box.classList.add('scrubbing');
   });
+
+  box.addEventListener('pointermove', (e) => {
+    if (!drag) hoverPreview(e, timeAt(e.clientX));
+  });
+
+  const onMove = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved && Math.abs(e.clientX - drag.startX) < 4) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      // Un glisser sur un bloc devient un deplacement, pas une selection.
+      if (drag.wasPlaying) video.pause();
+    }
+    video.currentTime = timeAt(e.clientX);
+    hoverPreview(e, video.currentTime);
+  };
+
+  const finish = (e) => {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    box.classList.remove('scrubbing');
+    const info = drag;
+    drag = null;
+    if (info.moved) {
+      // Reprise de la lecture la ou on a relache.
+      if (info.wasPlaying) video.play().catch(() => {});
+      return;
+    }
+    // Simple clic: selection du bloc, ou deplacement du curseur.
+    if (info.onLine) {
+      const id = info.onLine.dataset.id;
+      selectLine(id, true);
+      $(`#lines .line[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else if (e) {
+      video.currentTime = timeAt(e.clientX);
+    }
+  };
+
+  // Ecoute au niveau de la fenetre: relacher la souris ailleurs doit terminer
+  // le glisser, et le mouvement continuer meme hors de la timeline.
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', finish);
+  window.addEventListener('pointercancel', finish);
+  box.addEventListener('pointerleave', () => { if (!drag) hideHover(); });
+
+  // Molette: reglage fin, pratique pour caler une borne au dixieme.
+  box.addEventListener('wheel', (e) => {
+    if (!state.project) return;
+    e.preventDefault();
+    const step = e.shiftKey ? 1 : 0.1;
+    video.currentTime = Math.max(0, video.currentTime + Math.sign(e.deltaY) * step);
+  }, { passive: false });
+
   window.addEventListener('resize', () => { drawWave(); });
+}
+
+function hoverPreview(event, time) {
+  /* Petite etiquette de temps sous le pointeur: on sait ou on va tomber. */
+  const box = $('#timeline');
+  const tip = $('#tl-tip');
+  const rect = box.getBoundingClientRect();
+  tip.hidden = false;
+  tip.textContent = fmt(time);
+  const x = Math.max(0, Math.min(event.clientX - rect.left, rect.width));
+  tip.style.left = `${x}px`;
+}
+
+function hideHover() {
+  $('#tl-tip').hidden = true;
 }
 
 /* --------------------------------------------------------------- lecture */

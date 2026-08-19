@@ -47,6 +47,19 @@ TOUT SE PASSE SUR TON PC
   Les suivantes sont immediates.
 
 --------------------------------------------------------
+SE DEPLACER DANS LA VIDEO
+
+  Maintiens et glisse sur la timeline pour balayer la
+  video. Une etiquette suit le pointeur avec le temps
+  vise.
+
+  Un simple clic sur un bloc colore selectionne la
+  replique correspondante.
+
+  La molette avance de 0,1 s (1 s avec Maj) : pratique
+  pour caler une borne au dixieme de seconde.
+
+--------------------------------------------------------
 LES CRIS, SOUFFLES ET IMPACTS
 
   Whisper transcrit de la parole. Un cri de bagarre ou
