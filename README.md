@@ -2,6 +2,9 @@
 
 Outil local de création de **dub packs** pour *The Choicer Voicer*.
 
+[![Télécharger](https://img.shields.io/github/v/release/evanthifagne/dubpack-creator?label=t%C3%A9l%C3%A9charger&style=for-the-badge)](https://github.com/evanthifagne/dubpack-creator/releases/latest)
+[![Licence MIT](https://img.shields.io/badge/licence-MIT-blue?style=for-the-badge)](LICENSE)
+
 Tu déposes un **lien YouTube** ou un **fichier MP4**, l'outil transcrit les
 dialogues avec **Whisper** (en local, sur ta machine), **détecte
 automatiquement les personnages** en regroupant les voix, et te laisse tout
@@ -16,8 +19,9 @@ du modèle Whisper au premier lancement.
 
 ## Installation rapide sur Windows
 
-Télécharge le ZIP depuis la page **Releases** du dépôt, décompresse-le où tu
-veux, puis :
+**[⬇ Télécharger la dernière version](https://github.com/evanthifagne/dubpack-creator/releases/latest)**
+
+Décompresse le ZIP où tu veux, puis :
 
 1. Double-clique **`INSTALLER.bat`** — une seule fois, 5 à 15 minutes.
    Il crée l'environnement Python, installe Whisper, met **ffmpeg** en place et
@@ -29,8 +33,8 @@ Deux ZIP sont proposés :
 
 | Fichier | Taille | Quand le choisir |
 |---|---|---|
-| `...-avec-ffmpeg.zip` | ~72 Mo | **Recommandé.** ffmpeg est déjà dedans, rien à télécharger de plus. |
-| `...-v1.0.0.zip` | ~80 Ko | Si tu préfères un petit fichier : ffmpeg est téléchargé pendant l'installation. |
+| `DubPackCreator-Windows-v1.0.0-avec-ffmpeg.zip` | 72 Mo | **Recommandé.** ffmpeg est déjà dedans, rien à télécharger de plus. |
+| `DubPackCreator-Windows-v1.0.0.zip` | 75 Ko | Si tu préfères un petit fichier : ffmpeg est téléchargé pendant l'installation. |
 
 Sur macOS, voir « Lancement » plus bas.
 
