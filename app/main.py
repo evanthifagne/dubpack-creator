@@ -68,6 +68,9 @@ def api_diagnostics() -> dict:
     report["embeddings"] = module_available("speechbrain")
     report["picker"] = picker.available()
     report["yt_dlp_version"] = sources.yt_dlp_version()
+    from . import __version__
+
+    report["app_version"] = __version__
     report["python"] = sys.version.split()[0]
     report["python_exe"] = sys.executable
     return report
@@ -430,8 +433,9 @@ def api_analyze(project_id: str, payload: dict = Body(default={})) -> dict:
     project = _load(project_id)
     if not project.get("source", {}).get("file"):
         raise HTTPException(status_code=400, detail="Ce projet n'a pas de source vidéo.")
-    if manager.active_for(project_id):
-        raise HTTPException(status_code=409, detail="Une tâche est déjà en cours sur ce projet.")
+    if manager.active_kind_for(project_id, "analyze", "import"):
+        raise HTTPException(status_code=409,
+                            detail="Une transcription est déjà en cours sur ce projet.")
     opts = _settings(payload)
     keep = bool(payload.get("keep_names", True))
     job = manager.create("analyze", project_id,
@@ -478,8 +482,9 @@ def api_backing(project_id: str, payload: dict = Body(default={})) -> dict:
     mode = payload.get("mode") or ("demucs" if separate.available() else "original")
     if mode == "demucs" and not separate.available():
         raise HTTPException(status_code=400, detail=separate.install_hint())
-    if manager.active_for(project_id):
-        raise HTTPException(status_code=409, detail="Une tâche est déjà en cours sur ce projet.")
+    if manager.active_kind_for(project_id, "backing"):
+        raise HTTPException(status_code=409,
+                            detail="Un fond sonore est déjà en préparation pour ce projet.")
     job = _start_backing(project_id, source, mode)
     return {"job": job.to_dict()}
 
@@ -513,8 +518,6 @@ def api_export(project_id: str, payload: dict = Body(default={})) -> dict:
     if blocking:
         raise HTTPException(status_code=400,
                             detail="; ".join(i["message"] for i in blocking))
-    if manager.active_for(project_id):
-        raise HTTPException(status_code=409, detail="Une tâche est déjà en cours sur ce projet.")
     destination = (payload.get("destination") or "zip").lower()
     if destination not in {"zip", "folder", "game"}:
         raise HTTPException(status_code=400, detail="Destination inconnue.")

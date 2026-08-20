@@ -232,14 +232,20 @@ def _load_whisper(model_name: str, cb: ProgressCb):
                 cb(0.02, label)
             model = WhisperModel(model_name, device=device, compute_type=compute,
                                  download_root=root)
-        except Exception as exc:
-            message = str(exc)
+            if device == "cuda":
+                # Essai a vide: certaines pannes CUDA (bibliotheque manquante,
+                # noyau incompatible) n'apparaissent qu'a la premiere inference.
+                # Mieux vaut les provoquer ici, ou le repli est encore possible.
+                import numpy as _np
+
+                _, _ = model.transcribe(_np.zeros(8000, dtype=_np.float32),
+                                        language="en", beam_size=1,
+                                        without_timestamps=True)
+        except BaseException as exc:  # noqa: BLE001
+            message = str(exc) or exc.__class__.__name__
             problems.append(f"{device}/{compute}: {message[:160]}")
-            lowered = message.lower()
-            # Une carte absente ou des bibliothèques CUDA manquantes: on passe au
-            # suivant. Toute autre panne (disque, modèle corrompu) doit remonter.
-            if device == "cuda" and any(h in lowered for h in _CUDA_HINTS):
-                continue
+            # Sur une tentative GPU, quelle que soit la panne, on passe au
+            # suivant: le processeur marche partout et vaut mieux qu'un echec.
             if device == "cuda":
                 continue
             raise RuntimeError(

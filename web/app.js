@@ -1668,6 +1668,8 @@ async function openDiagnostics() {
     diagRow('Demucs (fond sonore)', flag(d.demucs, 'installé', 'non installé (facultatif)', true)),
     diagRow('empreintes ECAPA', flag(d.embeddings, 'installées', 'non installées (facultatif)', true)),
     diagRow('sélecteur de dossier', flag(d.picker, 'disponible', 'indisponible - colle les chemins', true)),
+    diagRow('version de l\'outil',
+      `<span class="diag-val ok">${escapeHtml(d.app_version || '?')}</span>`),
     diagRow('Python', `<span class="diag-val">${escapeHtml(d.python)} — ${escapeHtml(d.python_exe)}</span>`),
     diagRow('dossier de l\'outil', `<span class="diag-val">${escapeHtml(d.root)}</span>`),
   ].join('');

@@ -111,6 +111,20 @@ class JobManager:
         with self._lock:
             return list(self._jobs.values())
 
+    def active_kind_for(self, project_id: str, *kinds: str) -> Job | None:
+        """Tache active d'un type donne sur ce projet.
+
+        Permet de mettre un export a la suite d'une separation de voix, au lieu
+        de le refuser: la file les executera l'un apres l'autre, et le pack
+        contiendra bien le fond sonore.
+        """
+        return next(
+            (j for j in self._jobs.values()
+             if j.project_id == project_id and j.kind in kinds
+             and j.status in {"queued", "running"}),
+            None,
+        )
+
     def active(self) -> list[Job]:
         """Tâches en cours et en attente, dans l'ordre de passage."""
         with self._lock:
