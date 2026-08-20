@@ -190,6 +190,7 @@ const PREF_DEFAULTS = {
   export_destination: 'zip',
   video_height: 720,
   normalize_clips: true,
+  auto_backing: true,
 };
 
 function prefs() {
@@ -275,12 +276,14 @@ async function createProject() {
   $('#btn-create').disabled = true;
   try {
     const res = await api('/api/projects/import', { method: 'POST', body });
-    openJob(res.job, res.job.title || 'Création du dub pack', async () => {
+    openJob(res.job, res.job.title || 'Création du dub pack', async (result) => {
       // Si l'utilisateur travaille ailleurs, on ne lui vole pas l'ecran.
       const onHome = !$('#view-home').hidden;
       if (onHome) {
         await openProject(res.project_id);
-        toast('Dub pack généré. Vérifie les répliques et les personnages.', 'ok');
+        toast(result?.backing_queued
+          ? 'Dub pack généré. La séparation des voix continue en arrière-plan.'
+          : 'Dub pack généré. Vérifie les répliques et les personnages.', 'ok');
       } else {
         loadProjects();
         toast('Un dub pack est prêt : retrouve-le dans « Mes projets ».', 'ok');
@@ -1453,6 +1456,11 @@ function openSettings() {
   $('#pref-destination').value = p.export_destination || 'zip';
   $('#pref-height').value = String(p.video_height || 720);
   $('#pref-game-dir').value = p.game_dir || '';
+  $('#pref-auto-backing').checked = p.auto_backing !== false;
+  $('#pref-auto-backing').disabled = !state.caps?.demucs;
+  if (!state.caps?.demucs) {
+    $('#pref-auto-backing').title = "Demucs n'est pas installé — voir Modules optionnels plus bas";
+  }
   $('#pref-normalize').checked = p.normalize_clips !== false;
   refreshPrefModelState();
   renderModules();
@@ -1505,6 +1513,7 @@ async function saveSettings() {
     export_destination: $('#pref-destination').value,
     video_height: num($('#pref-height').value, 720),
     normalize_clips: $('#pref-normalize').checked,
+    auto_backing: $('#pref-auto-backing').checked,
     game_dir: $('#pref-game-dir').value.trim() || null,
   };
   await saveSettingsPatch(patch);

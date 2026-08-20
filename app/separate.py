@@ -73,7 +73,9 @@ def separate_backing(source: Path, out_dir: Path, cb: ProgressCb = None,
         raise RuntimeError("Demucs n'a pas produit de piste d'accompagnement.")
     if cb:
         cb(0.92, "Encodage du fond sonore")
-    result = media.encode_ogg(stems[0], out_dir / "_backing_track.ogg")
+    # Directement en MP3, le format attendu dans le pack: passer par un OGG
+    # intermediaire ferait subir deux compressions avec perte a la meme piste.
+    result = media.encode_mp3(stems[0], out_dir / "_backing_track.mp3")
     shutil.rmtree(work, ignore_errors=True)
     wav.unlink(missing_ok=True)
     if cb:
@@ -84,4 +86,4 @@ def separate_backing(source: Path, out_dir: Path, cb: ProgressCb = None,
 def backing_from_source(source: Path, out_dir: Path, cb: ProgressCb = None) -> Path:
     """Repli sans Demucs: l'audio d'origine complet sert de fond sonore."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    return media.encode_ogg(source, out_dir / "_backing_track.ogg", cb=cb)
+    return media.encode_mp3(source, out_dir / "_backing_track.mp3", cb=cb)

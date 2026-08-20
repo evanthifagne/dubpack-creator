@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -403,8 +404,21 @@ async def api_import(
         dubpack.save_project(proj)
         if upload_path and upload_path.exists():
             upload_path.unlink(missing_ok=True)
+
+        # Les packs de la communaute ont tous un fond sonore sans les voix: on
+        # l'enchaine sans rien demander. C'est une tache separee, mise en file:
+        # l'utilisateur peut deja editer ses repliques pendant ce temps.
+        auto = gamedir.load_settings().get("auto_backing", True)
+        if auto and separate.available() and not proj.get("assets", {}).get("backing_track"):
+            try:
+                _start_backing(proj["id"], Path(proj["source"]["file"]), "demucs")
+            except Exception:
+                # Un echec ici ne doit pas invalider la creation du pack.
+                traceback.print_exc()
+
         return {"project_id": proj["id"], "lines": len(proj["lines"]),
-                "characters": [c["name"] for c in proj["characters"]]}
+                "characters": [c["name"] for c in proj["characters"]],
+                "backing_queued": bool(auto and separate.available())}
 
     manager.run(job, work)
     return {"project_id": project["id"], "job": job.to_dict()}
@@ -433,16 +447,9 @@ def api_analyze(project_id: str, payload: dict = Body(default={})) -> dict:
     return {"job": job.to_dict()}
 
 
-@app.post("/api/projects/{project_id}/backing")
-def api_backing(project_id: str, payload: dict = Body(default={})) -> dict:
-    """Génère _backing_track.ogg (Demucs si dispo, sinon audio d'origine)."""
-    project = _load(project_id)
-    source = Path(project["source"]["file"])
-    mode = payload.get("mode") or ("demucs" if separate.available() else "original")
-    if mode == "demucs" and not separate.available():
-        raise HTTPException(status_code=400, detail=separate.install_hint())
-    if manager.active_for(project_id):
-        raise HTTPException(status_code=409, detail="Une tâche est déjà en cours sur ce projet.")
+def _start_backing(project_id: str, source: Path, mode: str):
+    """Cree et met en file une tache de fond sonore, et la renvoie."""
+    project = dubpack.load_project(project_id)
     job = manager.create("backing", project_id,
                          title=f"Fond sonore · {project.get('name', project_id)}")
     folder = dubpack.project_dir(project_id)
@@ -459,6 +466,20 @@ def api_backing(project_id: str, payload: dict = Body(default={})) -> dict:
         return {"backing_track": path.name, "mode": mode}
 
     manager.run(job, work)
+    return job
+
+
+@app.post("/api/projects/{project_id}/backing")
+def api_backing(project_id: str, payload: dict = Body(default={})) -> dict:
+    """Genere le fond sonore (Demucs si dispo, sinon audio d'origine)."""
+    project = _load(project_id)
+    source = Path(project["source"]["file"])
+    mode = payload.get("mode") or ("demucs" if separate.available() else "original")
+    if mode == "demucs" and not separate.available():
+        raise HTTPException(status_code=400, detail=separate.install_hint())
+    if manager.active_for(project_id):
+        raise HTTPException(status_code=409, detail="Une tâche est déjà en cours sur ce projet.")
+    job = _start_backing(project_id, source, mode)
     return {"job": job.to_dict()}
 
 
@@ -719,7 +740,7 @@ def api_put_settings(payload: dict = Body(...)) -> dict:
     allowed = {
         "game_dir", "export_destination", "export_folder", "zip_folder", "make_zip",
         "model", "language", "max_line", "detect_sounds", "sound_sensitivity",
-        "use_embeddings", "video_height", "normalize_clips",
+        "use_embeddings", "video_height", "normalize_clips", "auto_backing",
     }
     return gamedir.save_settings({k: v for k, v in payload.items() if k in allowed})
 

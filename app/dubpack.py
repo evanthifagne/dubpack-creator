@@ -256,6 +256,20 @@ def validate(project: dict) -> list[dict]:
         issues.append({"level": "error", "message": "La vidéo source est introuvable."})
     if not project.get("pack", {}).get("title"):
         issues.append({"level": "warning", "message": "Le pack n'a pas de titre."})
+    assets = project.get("assets", {})
+    if not assets.get("backing_track"):
+        issues.append({
+            "level": "warning",
+            "message": ("Aucun fond sonore: le pack n'aura ni musique ni bruitages "
+                        "derrière ta voix. Utilise « Séparer les voix » dans l'onglet Export."),
+        })
+    elif assets.get("backing_mode") == "original":
+        issues.append({
+            "level": "warning",
+            "message": ("Le fond sonore contient encore les dialogues d'origine: "
+                        "tu t'entendras doubler par-dessus la voix originale. "
+                        "« Séparer les voix » donne un bien meilleur résultat."),
+        })
 
     for idx, line in enumerate(lines, start=1):
         duration = float(line.get("end", 0)) - float(line.get("start", 0))
