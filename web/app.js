@@ -65,16 +65,15 @@ async function api(path, opts = {}) {
 async function loadCaps() {
   state.caps = await api('/api/capabilities');
   const c = state.caps;
-  const badges = [
-    ['ffmpeg', !!c.ffmpeg],
-    ['Theora', !!c.theora],
-    [c.asr_engines[0] || 'Whisper manquant', c.asr_engines.length > 0],
-    ['yt-dlp', !!c.yt_dlp],
-    [c.demucs ? 'Demucs' : 'Demucs absent', !!c.demucs],
-  ];
-  $('#caps').innerHTML = badges
-    .map(([label, ok]) => `<span class="cap ${ok ? 'ok' : 'no'}">${ok ? '●' : '○'} ${label}</span>`)
-    .join('');
+
+  // Le header reste sobre: le detail vit dans le panneau Diagnostic. On ne garde
+  // qu'une pastille quand quelque chose empeche vraiment de travailler.
+  const blocking = !c.ffmpeg || !c.theora || !c.asr_engines.length;
+  $('#diag-dot').hidden = !blocking;
+  $('#btn-diag').classList.toggle('has-issue', blocking);
+  $('#btn-diag').title = blocking
+    ? "Un composant nécessaire manque — clique pour voir et réparer"
+    : 'Diagnostic et réparation';
 
   for (const sel of ['#set-model', '#re-model']) {
     $(sel).innerHTML = c.models
@@ -181,6 +180,33 @@ function renderModels() {
 }
 
 /* --------------------------------------------------------------- accueil */
+const PREF_DEFAULTS = {
+  model: null,             // null => valeur conseillee du serveur
+  language: '',
+  max_line: 9,
+  detect_sounds: true,
+  sound_sensitivity: 1,
+  use_embeddings: true,
+  export_destination: 'zip',
+  video_height: 720,
+  normalize_clips: true,
+};
+
+function prefs() {
+  return { ...PREF_DEFAULTS, ...(state.settings || {}) };
+}
+
+function applyPrefsToHome() {
+  /* L'accueil part des reglages: on ne resaisit pas les memes choix a chaque pack. */
+  const p = prefs();
+  const model = p.model || state.caps?.default_model;
+  if (model) $('#set-model').value = model;
+  $('#set-language').value = p.language || '';
+  $('#set-maxline').value = String(p.max_line || 9);
+  $('#set-sounds').checked = p.detect_sounds !== false;
+  refreshModelState();
+}
+
 function settingsFromForm() {
   return {
     model: $('#set-model').value,
@@ -188,6 +214,8 @@ function settingsFromForm() {
     speakers: $('#set-speakers').value,
     max_line: num($('#set-maxline').value, 9),
     detect_sounds: $('#set-sounds').checked,
+    sound_sensitivity: prefs().sound_sensitivity,
+    use_embeddings: prefs().use_embeddings !== false,
   };
 }
 
@@ -224,11 +252,6 @@ function setupHome() {
   });
   $('#btn-create').addEventListener('click', createProject);
   $('#set-model').addEventListener('change', refreshModelState);
-  $('#btn-models-toggle').addEventListener('click', () => {
-    const box = $('#models-list');
-    box.hidden = !box.hidden;
-    $('#btn-models-toggle').textContent = box.hidden ? 'Gérer' : 'Masquer';
-  });
   $('#btn-home').addEventListener('click', () => showHome());
   refreshCreateButton();
 }
@@ -308,8 +331,8 @@ async function loadProjects() {
 }
 
 /* Icones Tabler, servies par le sprite inline: pas d'emoji dans l'interface. */
-const icon = (name, cls = 'ic') =>
-  `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+const icon = (name, extra = '') =>
+  `<svg class="ic${extra ? ` ${extra}` : ''}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -740,7 +763,8 @@ function renderCharacters() {
       <input type="text" value="${escapeHtml(c.name)}" placeholder="Nom du personnage">
       <button class="line-btn char-shot" title="Utiliser l'image actuelle de la vidéo comme portrait">${icon('camera')}</button>
       ${c.image ? `<button class="line-btn char-shot-del" title="Retirer le portrait">${icon('close')}</button>` : ''}
-      <span class="char-count">${counts[c.id] || 0} rép.</span>`;
+      <span class="char-count">${counts[c.id] || 0} rép.</span>
+      <button class="line-btn char-del" title="Supprimer ce personnage">${icon('trash')}</button>`;
     const input = $('input', row);
     input.addEventListener('input', () => {
       c.name = input.value;
@@ -763,6 +787,7 @@ function renderCharacters() {
       c.image = null;
       renderCharacters();
     });
+    $('.char-del', row).addEventListener('click', () => askRemoveCharacter(c, counts[c.id] || 0, box));
     box.append(row);
   }
   if (!chars().length) box.innerHTML = '<p class="muted small">Aucun personnage détecté.</p>';
@@ -778,6 +803,75 @@ function renderCharacters() {
     target.name = chip.dataset.name;
     renderCharacters(); renderLines(); renderTimeline(); scheduleSave();
   }));
+}
+
+function askRemoveCharacter(char, count, box) {
+  /* Supprimer un personnage laisse ses repliques orphelines: on demande
+     explicitement ou elles doivent aller, plutot que de deviner. */
+  $$('.char-remove', box).forEach((n) => n.remove());
+  const others = chars().filter((c) => c.id !== char.id);
+
+  if (!count) {
+    removeCharacter(char, null);
+    return;
+  }
+
+  const panel = document.createElement('div');
+  panel.className = 'char-remove';
+  const options = others.map((c) =>
+    `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+  panel.innerHTML = `
+    <p><strong>${escapeHtml(char.name)}</strong> a ${count} réplique(s).
+       Que faire de ces répliques ?</p>
+    ${others.length
+      ? `<div class="grid-2">
+           <label><span>Les donner à</span><select class="cr-target">${options}</select></label>
+           <button class="btn btn-primary cr-move">Déplacer et supprimer</button>
+         </div>`
+      : '<p class="muted">Aucun autre personnage : les répliques seront supprimées avec lui.</p>'}
+    <div class="btn-row" style="margin-top:9px">
+      <button class="btn btn-ghost cr-drop">Supprimer aussi les ${count} réplique(s)</button>
+      <button class="btn btn-ghost cr-cancel">Annuler</button>
+    </div>`;
+  box.append(panel);
+
+  $('.cr-move', panel)?.addEventListener('click', () => {
+    removeCharacter(char, $('.cr-target', panel).value);
+  });
+  $('.cr-drop', panel).addEventListener('click', () => {
+    if (!confirm(`Supprimer ${char.name} et ses ${count} réplique(s) ?`)) return;
+    removeCharacter(char, null);
+  });
+  $('.cr-cancel', panel).addEventListener('click', () => panel.remove());
+}
+
+function removeCharacter(char, targetId) {
+  const project = state.project;
+  if (targetId) {
+    for (const line of project.lines) {
+      if (line.speaker === char.id) line.speaker = targetId;
+    }
+  } else {
+    project.lines = project.lines.filter((l) => l.speaker !== char.id);
+  }
+  project.characters = project.characters.filter((c) => c.id !== char.id);
+  renderCharacters(); renderLines(); renderTimeline(); validate(); scheduleSave();
+  toast(targetId
+    ? `${char.name} supprimé, ses répliques déplacées.`
+    : `${char.name} supprimé.`);
+}
+
+function addCharacter() {
+  const project = state.project;
+  const used = new Set(project.characters.map((c) => c.id));
+  let index = project.characters.length + 1;
+  while (used.has(`Personnage ${index}`)) index += 1;
+  const id = `Personnage ${index}`;
+  const palette = ['#f97316', '#38bdf8', '#a3e635', '#e879f9', '#facc15', '#fb7185', '#2dd4bf', '#c084fc'];
+  project.characters.push({
+    id, name: id, color: palette[project.characters.length % palette.length], image: null,
+  });
+  renderCharacters(); renderLines(); scheduleSave();
 }
 
 /* --------------------------------------------------------------- lignes */
@@ -1209,7 +1303,7 @@ function setupExport() {
     if (destination === 'game' && !confirm(
       `Le pack va être écrit dans les fichiers du jeu :\n\n${body.target_path}\n\nContinuer ?`)) return;
 
-    saveSettings({
+    saveSettingsPatch({
       export_destination: destination,
       export_folder: destination === 'folder' ? body.target_path : state.settings.export_folder,
       game_dir: destination === 'game' ? body.target_path : state.settings.game_dir,
@@ -1269,6 +1363,7 @@ function setupExport() {
     renderLines();
   });
   $('#btn-add-line').addEventListener('click', addLine);
+  $('#btn-add-char').addEventListener('click', addCharacter);
   $('#btn-drop-sounds').addEventListener('click', () => {
     const sounds = lines().filter((l) => l.nonverbal);
     if (!sounds.length) { toast('Aucun son non parlé dans ce pack.'); return; }
@@ -1341,6 +1436,97 @@ function showExportResult(result, projectId) {
   toast(installed ? 'Pack installé dans le jeu.' : 'Export terminé.', 'ok');
 }
 
+/* ------------------------------------------------------------- réglages */
+function openSettings() {
+  const p = prefs();
+  $('#pref-model').innerHTML = (state.caps?.models || [])
+    .map((m) => `<option value="${m}">${m}</option>`).join('');
+  $('#pref-model').value = p.model || state.caps?.default_model || 'small';
+  $('#pref-language').value = p.language || '';
+  $('#pref-maxline').value = String(p.max_line || 9);
+  $('#pref-sensitivity').value = String(p.sound_sensitivity || 1);
+  $('#pref-sounds').checked = p.detect_sounds !== false;
+  $('#pref-embeddings').checked = p.use_embeddings !== false;
+  $('#pref-destination').value = p.export_destination || 'zip';
+  $('#pref-height').value = String(p.video_height || 720);
+  $('#pref-game-dir').value = p.game_dir || '';
+  $('#pref-normalize').checked = p.normalize_clips !== false;
+  refreshPrefModelState();
+  renderModules();
+  renderModels();
+  $('#settings-overlay').hidden = false;
+}
+
+function refreshPrefModelState() {
+  const chosen = $('#pref-model').value;
+  const model = state.models.find((m) => m.name === chosen);
+  const el = $('#pref-model-state');
+  if (!model) { el.textContent = ''; return; }
+  el.textContent = model.cached
+    ? `déjà téléchargé (${model.size_label}) — ${model.note}`
+    : `à télécharger : ${model.expected} au premier usage — ${model.note}`;
+  el.style.color = model.cached ? 'var(--ok)' : 'var(--warn)';
+}
+
+function renderModules() {
+  const c = state.caps || {};
+  const rows = [
+    ['Demucs', 'demucs', 'Sépare les voix de la musique pour produire un fond sonore.', '~2 Go'],
+    ['Empreintes ECAPA', 'embeddings', 'Distingue mieux des voix proches lors de la détection des personnages.', '~1 Go'],
+  ];
+  $('#pref-modules').innerHTML = rows.map(([label, key, note, size]) => `
+    <div class="model-row ${c[key] ? 'cached' : ''}">
+      <div class="model-main">
+        <div class="model-name">${escapeHtml(label)}
+          ${c[key] ? '<span class="tag ok">installé</span>' : ''}</div>
+        <div class="model-note">${escapeHtml(note)}</div>
+      </div>
+      <span class="model-size">${escapeHtml(c[key] ? '' : size)}</span>
+      ${c[key] ? '' : `<button class="btn btn-ghost" data-mod="${key}">Installer</button>`}
+    </div>`).join('');
+  $$('[data-mod]', $('#pref-modules')).forEach((btn) => btn.addEventListener('click', () => {
+    const which = btn.dataset.mod === 'demucs' ? 'demucs' : 'embeddings';
+    $('#settings-overlay').hidden = true;
+    runSetup('/api/setup/extras', { which }, `Installation · ${which}`);
+  }));
+}
+
+async function saveSettings() {
+  const patch = {
+    model: $('#pref-model').value,
+    language: $('#pref-language').value,
+    max_line: num($('#pref-maxline').value, 9),
+    sound_sensitivity: num($('#pref-sensitivity').value, 1),
+    detect_sounds: $('#pref-sounds').checked,
+    use_embeddings: $('#pref-embeddings').checked,
+    export_destination: $('#pref-destination').value,
+    video_height: num($('#pref-height').value, 720),
+    normalize_clips: $('#pref-normalize').checked,
+    game_dir: $('#pref-game-dir').value.trim() || null,
+  };
+  await saveSettingsPatch(patch);
+  applyPrefsToHome();
+  $('#settings-overlay').hidden = true;
+  toast('Réglages enregistrés.', 'ok');
+}
+
+function setupSettings() {
+  $('#btn-settings').addEventListener('click', openSettings);
+  $('#btn-settings-close').addEventListener('click', () => { $('#settings-overlay').hidden = true; });
+  $('#settings-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'settings-overlay') $('#settings-overlay').hidden = true;
+  });
+  $('#btn-settings-save').addEventListener('click', saveSettings);
+  $('#pref-model').addEventListener('change', refreshPrefModelState);
+  $('#btn-settings-reset').addEventListener('click', async () => {
+    if (!confirm('Revenir aux valeurs conseillées ?')) return;
+    await saveSettingsPatch({ ...PREF_DEFAULTS, model: state.caps?.default_model || 'small' });
+    openSettings();
+    applyPrefsToHome();
+    toast('Valeurs conseillées rétablies.');
+  });
+}
+
 /* ----------------------------------------------------------- diagnostic */
 const flag = (value, okText, noText, warn = false) => value
   ? `<span class="diag-val ok">${escapeHtml(okText)}</span>`
@@ -1376,6 +1562,15 @@ async function openDiagnostics() {
         : ''}
     </div>`);
   }
+  // YouTube evolue vite: un yt-dlp en retard est la cause n°1 des refus 403.
+  fixes.push(`<div class="diag-fix">
+    <h3>Téléchargement de vidéos (yt-dlp ${escapeHtml(d.yt_dlp_version || '?')})</h3>
+    <p>Si un lien YouTube échoue — « HTTP error 403 », « Unable to download video
+       data », « Sign in to confirm you're not a bot » — c'est presque toujours
+       que yt-dlp est en retard sur une modification du site. La mise à jour
+       règle le cas la plupart du temps.</p>
+    <button class="btn btn-ghost" id="btn-fix-ytdlp">Mettre à jour yt-dlp</button>
+  </div>`);
   if (!d.demucs) {
     fixes.push(`<div class="diag-fix">
       <h3>Demucs n'est pas installé (facultatif)</h3>
@@ -1430,6 +1625,8 @@ async function openDiagnostics() {
     'Installation de ffmpeg'));
   $('#btn-fix-demucs')?.addEventListener('click', () => runSetup('/api/setup/extras',
     { which: 'demucs' }, 'Installation de Demucs'));
+  $('#btn-fix-ytdlp')?.addEventListener('click', () => runSetup('/api/setup/yt-dlp',
+    {}, 'Mise à jour de yt-dlp'));
 }
 
 async function renderRecentJobs() {
@@ -1490,7 +1687,6 @@ async function runSetup(path, body, title) {
 
 function setupDiagnostics() {
   $('#btn-diag').addEventListener('click', openDiagnostics);
-  $('#caps').addEventListener('click', openDiagnostics);
   $('#btn-diag-close').addEventListener('click', () => { $('#diag-overlay').hidden = true; });
   $('#diag-overlay').addEventListener('click', (e) => {
     if (e.target.id === 'diag-overlay') $('#diag-overlay').hidden = true;
@@ -1499,6 +1695,7 @@ function setupDiagnostics() {
     if (e.key !== 'Escape') return;
     $('#diag-overlay').hidden = true;
     $('#error-overlay').hidden = true;
+    $('#settings-overlay').hidden = true;
   });
 }
 
@@ -1516,7 +1713,7 @@ function refreshDestination() {
     : dest === 'folder' ? 'Exporter dans ce dossier' : 'Exporter le dub pack';
 }
 
-async function saveSettings(patch) {
+async function saveSettingsPatch(patch) {
   state.settings = { ...state.settings, ...patch };
   try {
     await api('/api/settings', {
@@ -1594,7 +1791,7 @@ async function selectGameDir(path) {
 function setupDestination() {
   $$('input[name="dest"]').forEach((r) => r.addEventListener('change', () => {
     refreshDestination();
-    saveSettings({ export_destination: currentDestination() });
+    saveSettingsPatch({ export_destination: currentDestination() });
   }));
 
   $('#btn-detect-game').addEventListener('click', async () => {
@@ -1642,7 +1839,7 @@ function setupDestination() {
       const path = await pick('Dossier de destination du pack', $('#folder-path').value);
       if (path) {
         $('#folder-path').value = path;
-        saveSettings({ export_folder: path });
+        saveSettingsPatch({ export_folder: path });
       }
     } catch (err) { toast(err.message, 'err'); }
   });
@@ -1652,9 +1849,9 @@ function setupDestination() {
     if (value) selectGameDir(value);
   });
   $('#folder-path').addEventListener('change', () =>
-    saveSettings({ export_folder: $('#folder-path').value.trim() }));
+    saveSettingsPatch({ export_folder: $('#folder-path').value.trim() }));
   $('#opt-makezip').addEventListener('change', () =>
-    saveSettings({ make_zip: $('#opt-makezip').checked }));
+    saveSettingsPatch({ make_zip: $('#opt-makezip').checked }));
 }
 
 /* --- reprise des taches deja en cours ---------------------------------- */
@@ -1686,6 +1883,7 @@ async function adoptRunningJobs() {
   setupExport();
   setupDestination();
   setupDiagnostics();
+  setupSettings();
   await loadSettings();
   try {
     await loadCaps();
@@ -1694,6 +1892,7 @@ async function adoptRunningJobs() {
   }
   await loadProjects();
   await loadModels();
+  applyPrefsToHome();
   await adoptRunningJobs();
   window.addEventListener('beforeunload', () => { if (state.saveTimer) save(); });
 })();

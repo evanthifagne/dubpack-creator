@@ -92,6 +92,35 @@ def clip_basename(index: int, line: dict, character: str, include_timestamp: boo
 # Projet
 # ---------------------------------------------------------------------------
 
+# Caracteres interdits par Windows, plus ceux qui n'ont rien a faire dans un nom
+# de dossier lu par le jeu.
+_FORBIDDEN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def safe_folder_name(name: str, fallback: str = "Dub Pack") -> str:
+    """Nom de dossier sûr pour le pack.
+
+    Un titre YouTube peut contenir des emoji ou des symboles exotiques. Ils
+    passent souvent, mais pas toujours, selon le système de fichiers et le
+    moteur du jeu: on les retire du nom de dossier. Le titre complet reste
+    intact dans `_pack_info.ini`, qui est ce que le joueur voit.
+    """
+    cleaned = _FORBIDDEN.sub("", name or "")
+    # On garde lettres, chiffres, espaces et ponctuation simple; le reste part.
+    cleaned = "".join(
+        ch for ch in unicodedata.normalize("NFC", cleaned)
+        if ch.isalnum() or ch in " -_.,'()[]&+!" or unicodedata.category(ch) == "Lm"
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    # Noms reserves par Windows.
+    if cleaned.upper().split(".")[0] in {
+        "CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    }:
+        cleaned = f"{cleaned} pack"
+    return cleaned[:80].strip() or fallback
+
+
 def project_dir(project_id: str) -> Path:
     safe = re.sub(r"[^A-Za-z0-9_-]", "", project_id)
     if not safe:
@@ -264,7 +293,7 @@ def export_pack(project: dict, cb: ProgressCb = None,
     options = project.get("options", {})
     pack_info = project.get("pack", {})
     pack_name = (pack_info.get("title") or project.get("name") or "Dub Pack").strip()
-    safe_pack = re.sub(r'[<>:"/\\|?*]', "", pack_name).strip(" .") or "Dub Pack"
+    safe_pack = safe_folder_name(pack_name)
 
     out_root = folder / "export"
     pack_dir = out_root / safe_pack

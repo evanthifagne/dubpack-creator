@@ -198,15 +198,67 @@ def pick_engine(requested: str | None = None) -> str:
 # Moteurs
 # ---------------------------------------------------------------------------
 
-def _transcribe_faster_whisper(audio: Path, model_name: str, language: str | None,
-                               duration: float, cb: ProgressCb) -> tuple[list[Line], str]:
+# Erreurs typiques d'une carte NVIDIA detectee mais sans bibliotheques CUDA.
+_CUDA_HINTS = ("cublas", "cudnn", "cuda", "cudart", "libcu", "gpu")
+
+# Dernier appareil utilise, pour l'afficher dans le diagnostic.
+LAST_DEVICE = {"device": None, "compute": None, "fallback": None}
+
+
+def _load_whisper(model_name: str, cb: ProgressCb):
+    """Charge le modèle sur le GPU si possible, sinon sur le processeur.
+
+    `device="auto"` tente CUDA dès qu'une carte NVIDIA est présente, et échoue
+    net si les bibliothèques CUDA manquent (« cublas64_12.dll is not found »).
+    Un outil grand public ne peut pas s'arrêter là: on retombe sur le processeur,
+    qui marche partout.
+    """
     from faster_whisper import WhisperModel
 
-    if cb:
-        cb(0.02, loading_label(model_name))
-    # int8 sur CPU: le meilleur compromis vitesse/qualité sur Windows comme sur Mac.
-    model = WhisperModel(model_name, device="auto", compute_type="int8",
-                         download_root=str(CACHE_DIR / "models"))
+    root = str(CACHE_DIR / "models")
+    attempts = [
+        # float16 sur GPU: c'est là que le gain de vitesse est réel.
+        ("cuda", "float16"),
+        ("cuda", "int8_float16"),
+        ("cpu", "int8"),
+    ]
+    problems: list[str] = []
+    for device, compute in attempts:
+        try:
+            if cb:
+                label = loading_label(model_name)
+                if device == "cpu" and problems:
+                    label = f"{label} — sur processeur"
+                cb(0.02, label)
+            model = WhisperModel(model_name, device=device, compute_type=compute,
+                                 download_root=root)
+        except Exception as exc:
+            message = str(exc)
+            problems.append(f"{device}/{compute}: {message[:160]}")
+            lowered = message.lower()
+            # Une carte absente ou des bibliothèques CUDA manquantes: on passe au
+            # suivant. Toute autre panne (disque, modèle corrompu) doit remonter.
+            if device == "cuda" and any(h in lowered for h in _CUDA_HINTS):
+                continue
+            if device == "cuda":
+                continue
+            raise RuntimeError(
+                "Impossible de charger le modèle de transcription. "
+                + " | ".join(problems)
+            ) from exc
+        LAST_DEVICE.update(device=device, compute=compute,
+                           fallback=problems[0] if problems and device == "cpu" else None)
+        return model, device, compute
+
+    raise RuntimeError("Impossible de charger le modèle de transcription. "
+                       + " | ".join(problems))
+
+
+def _transcribe_faster_whisper(audio: Path, model_name: str, language: str | None,
+                               duration: float, cb: ProgressCb) -> tuple[list[Line], str]:
+    model, device, compute = _load_whisper(model_name, cb)
+    if cb and device == "cpu":
+        cb(0.03, "Transcription sur processeur")
     segments, info = model.transcribe(
         str(audio),
         language=language or None,

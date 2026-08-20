@@ -27,7 +27,13 @@
 .ic-sm { width: 14px; height: 14px; vertical-align: -2px; }
 .ic-brand { width: 26px; height: 26px; stroke: var(--accent); stroke-width: 1.8; }
 .ic-drop { width: 34px; height: 34px; stroke: var(--muted); stroke-width: 1.6; }
-.btn .ic { margin-right: 2px; }
+/* Repères d'état: la couleur porte le sens, on ne compte pas que sur la forme. */
+.diag-val.ok .ic { stroke: var(--ok); }
+.diag-val.no .ic { stroke: var(--err); }
+.diag-val.warn .ic { stroke: var(--warn); }
+.diag-key .ic { margin-right: 4px; }
+.backing-state.on .ic { stroke: var(--ok); }
+
 .line-btn .ic, .line-play .ic { width: 15px; height: 15px; vertical-align: -3px; margin: 0; }
 .job-steps div { display: flex; align-items: center; gap: 6px; }
 
@@ -72,6 +78,13 @@ small { font-size: 11.5px; }
   white-space: nowrap;
 }
 .caps { cursor: pointer; }
+/* Pastille discrete: le header reste sobre, mais un probleme se voit. */
+.diag-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--err);
+  display: inline-block; margin-right: 7px; vertical-align: 1px;
+  box-shadow: 0 0 6px rgba(248, 113, 113, .8);
+}
+.btn.has-issue { border-color: rgba(248, 113, 113, .5); }
 .cap.ok { color: var(--ok); border-color: rgba(52, 211, 153, .35); }
 .cap.no { color: var(--err); border-color: rgba(248, 113, 113, .35); }
 
@@ -123,7 +136,13 @@ textarea { resize: vertical; }
   font: inherit; font-weight: 550; cursor: pointer; border-radius: 8px;
   padding: 8px 14px; border: 1px solid var(--line);
   background: var(--panel-2); color: var(--text); transition: .12s;
+  /* En ligne et insecable: un libelle accompagne d'une icone ne doit jamais
+     se couper en deux lignes. */
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  white-space: nowrap; line-height: 1.2;
 }
+.btn-icon { padding: 8px; }
+.btn-icon .ic { margin: 0; }
 .btn:hover:not(:disabled) { border-color: #37455e; background: #232c3d; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn-primary { background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: #c2570d; color: #1a0f03; }
@@ -282,6 +301,15 @@ input.time { width: 66px; padding: 3px 5px; font-size: 12px; font-variant-numeri
 .tab.active { background: var(--panel-2); color: var(--text); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); }
 
 .char-row { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+.char-del { margin-left: 1px; }
+.char-remove {
+  border: 1px solid rgba(248, 113, 113, .3); border-radius: 8px;
+  background: rgba(248, 113, 113, .07); padding: 10px 11px; margin: -2px 0 11px;
+  font-size: 12.5px;
+}
+.char-remove p { margin: 0 0 9px; color: #fecaca; }
+.char-remove .grid-2 { align-items: end; }
+.char-remove label { margin: 0; }
 .char-swatch { width: 14px; height: 14px; border-radius: 4px; flex: 0 0 14px; border: 1px solid rgba(255, 255, 255, .2); }
 .char-row input { flex: 1; }
 .char-portrait { width: 30px; height: 30px; border-radius: 5px; object-fit: cover; border: 1px solid var(--line); flex: 0 0 30px; }
@@ -352,7 +380,7 @@ input.time { width: 66px; padding: 3px 5px; font-size: 12px; font-variant-numeri
 }
 .job-label { margin: 0 0 10px; color: var(--text); font-size: 13.5px; }
 .job-steps { max-height: 150px; overflow-y: auto; font-size: 12px; color: var(--muted); margin-bottom: 16px; display: grid; gap: 2px; }
-.job-steps div .ic { stroke: var(--ok); }
+.job-steps div .ic { stroke: var(--ok); stroke-width: 2.4; }
 
 .diag-card {
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
@@ -361,6 +389,8 @@ input.time { width: 66px; padding: 3px 5px; font-size: 12px; font-variant-numeri
 }
 .diag-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .diag-body { font-size: 13px; }
+.diag-card h3 { display: flex; align-items: center; gap: 7px; }
+.diag-card h3 .ic { stroke: var(--accent-2); }
 .diag-row {
   display: flex; gap: 10px; align-items: baseline; padding: 7px 0;
   border-bottom: 1px solid var(--line);

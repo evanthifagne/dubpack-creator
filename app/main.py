@@ -65,6 +65,7 @@ def api_diagnostics() -> dict:
     report["demucs"] = separate.available()
     report["embeddings"] = module_available("speechbrain")
     report["picker"] = picker.available()
+    report["yt_dlp_version"] = sources.yt_dlp_version()
     report["python"] = sys.version.split()[0]
     report["python_exe"] = sys.executable
     return report
@@ -163,6 +164,43 @@ def api_setup_extras(payload: dict = Body(default={})) -> dict:
         return {"demucs": separate.available(),
                 "embeddings": module_available("speechbrain"),
                 "restart_needed": True}
+
+    manager.run(job, work)
+    return {"job": job.to_dict()}
+
+
+@app.post("/api/setup/yt-dlp")
+def api_setup_ytdlp() -> dict:
+    """Met yt-dlp a jour: YouTube change souvent et casse les anciennes versions."""
+    if manager.active_for("_setup"):
+        raise HTTPException(status_code=409, detail="Une installation est deja en cours.")
+    job = manager.create("setup-yt-dlp", "_setup", title="Mise a jour de yt-dlp")
+
+    def work(job_ref, progress):
+        before = sources.yt_dlp_version() or "inconnue"
+        progress(0.05, f"Version actuelle: {before}")
+        proc = cancel.register(subprocess.Popen(
+            [sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
+             "--upgrade", "yt-dlp"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, errors="replace",
+            **({"creationflags": 0x08000000} if os.name == "nt" else {}),
+        ))
+        assert proc.stdout is not None
+        last = ""
+        for line in proc.stdout:
+            line = line.strip()
+            if line:
+                last = line
+                progress(min(job_ref.progress + 0.08, 0.9), line[:90])
+        proc.wait()
+        cancel.unregister(proc)
+        if proc.returncode != 0:
+            if cancel.is_cancelled():
+                raise media.CancelledOperation()
+            raise RuntimeError(f"La mise a jour a echoue. {last}")
+        progress(1.0, "yt-dlp mis a jour")
+        return {"before": before, "restart_needed": True}
 
     manager.run(job, work)
     return {"job": job.to_dict()}
@@ -284,6 +322,13 @@ def api_update_project(project_id: str, payload: dict = Body(...)) -> dict:
 
 
 def _settings(payload: dict) -> dict:
+    """Reglages effectifs: les preferences enregistrees servent de base.
+
+    Ainsi les valeurs choisies dans la fenetre Reglages s'appliquent meme si
+    l'appel n'en precise pas, et le comportement reste coherent hors interface.
+    """
+    saved = gamedir.load_settings()
+    payload = {**{k: v for k, v in saved.items() if v is not None}, **payload}
     speakers = payload.get("speakers")
     try:
         speakers = int(speakers) if speakers not in (None, "", "auto", 0) else None
@@ -660,7 +705,12 @@ def api_get_settings() -> dict:
 
 @app.put("/api/settings")
 def api_put_settings(payload: dict = Body(...)) -> dict:
-    allowed = {"game_dir", "export_destination", "export_folder", "make_zip"}
+    # Liste explicite: on n'ecrit pas n'importe quoi dans le fichier de reglages.
+    allowed = {
+        "game_dir", "export_destination", "export_folder", "make_zip",
+        "model", "language", "max_line", "detect_sounds", "sound_sensitivity",
+        "use_embeddings", "video_height", "normalize_clips",
+    }
     return gamedir.save_settings({k: v for k, v in payload.items() if k in allowed})
 
 
