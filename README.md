@@ -203,7 +203,9 @@ Si la détection ne trouve rien : dans le jeu, **Modpack Guides → Dub Mode Pac
 
 **Dans un dossier de mon choix** — le Bureau, une clé USB, un dossier partagé.
 
-**ZIP à télécharger** — l'archive classique, à installer à la main.
+**Une archive ZIP** — tu choisis le dossier où elle est déposée (Bureau, clé
+USB…). Laissé vide, le ZIP reste dans le dossier de l'outil avec un bouton de
+téléchargement.
 
 ## 5. Installer le pack à la main
 
@@ -217,49 +219,68 @@ Si la détection ne trouve rien : dans le jeu, **Modpack Guides → Dub Mode Pac
 
 ## 6. Ce qui est exporté
 
+Structure calquée sur un dub pack de la communauté qui fonctionne en jeu :
+
 ```
 Mon Dub Pack/
-├── _pack_info.ini                  titre, sous-titre, auteurs, icône
-├── Icon.png                        vignette du pack
+├── _pack_info.ini                  titre, icône, auteurs, readme
+├── icon.png                        vignette du pack
 ├── dub_video.ogv                   vidéo de référence (Theora + Vorbis)
-├── _backing_track.ogg              fond sonore sans les voix (facultatif)
+├── _backing_track.mp3              fond sonore sans les voix (facultatif)
 ├── 01_lucie_marco-tu-as-vu.ogg     audio d'origine de la réplique
-├── 01_lucie_marco-tu-as-vu.ini     métadonnées de la réplique
+├── 01_lucie_marco-tu-as-vu.png     image affichée pendant la séquence
+├── 01_lucie_marco-tu-as-vu.txt     métadonnées de la réplique
 ├── 02_marco_oui-lucie.ogg
-├── 02_marco_oui-lucie.ini
-└── README.txt                      rappel d'installation
+├── 02_marco_oui-lucie.png
+└── 02_marco_oui-lucie.txt
 ```
 
-Chaque réplique produit un `.ogg` (l'audio d'origine, que le joueur va imiter)
-et un `.ini` de même nom, au format ConfigFile de Godot :
+Chaque réplique produit **trois** fichiers de même nom : l'audio, l'image et les
+métadonnées, au format ConfigFile de Godot :
 
 ```ini
 [data]
 
 caption="Marco, tu as vu ce qui s'est passé hier soir ?"
-dub_timestamps=[0.240]
+image="01_lucie_marco-tu-as-vu.png"
+dub_timestamps=[0.340]
 dub_characters=["Lucie"]
 ```
 
 - `caption` — le sous-titre affiché ;
-- `dub_timestamps` — l'instant, en secondes, où la réplique se déclenche dans
-  `dub_video.ogv` ;
-- `dub_characters` — le personnage qui parle ; c'est ce qui permet au joueur de
-  filtrer par personnage (les voix non choisies gardent l'audio d'origine) ;
-- `images`, `tags`, `dub_only` — ajoutés seulement si tu les renseignes.
+- `image` — l'image montrée pendant la séquence. **C'est elle qui manquait** :
+  sans elle, le jeu joue le son sans rien afficher. Elle est prise au milieu de
+  la réplique, là où le personnage est en train de parler, et à la taille exacte
+  de la vidéo exportée ;
+- `dub_timestamps` — l'instant, en secondes, où la réplique se déclenche ;
+- `dub_characters` — le personnage qui parle, ce qui permet au joueur de filtrer ;
+- `tags`, `dub_only` — ajoutés seulement si tu les renseignes.
 
-Les clips sont normalisés en volume par défaut : le scoring du jeu se comporte
-mal sur les signaux trop faibles.
+Le pack ne contient **aucun autre fichier** : depuis que les métadonnées sont en
+`.txt`, un fichier texte égaré pourrait être pris pour la description d'une
+réplique.
 
-## 7. Fond sonore (musique et bruitages)
+Les clips sont en `.ogg` là où les packs de la communauté utilisent `.mp3`. Les
+deux sont lus par le jeu — l'`.ogg` a été vérifié en jeu, et il est plus léger à
+qualité égale.
 
-Pour que ta voix se pose sur la bande-son d'origine, le pack peut contenir un
-`_backing_track.ogg`. Deux méthodes, dans l'onglet **Export** :
+## 7. Fond sonore : sépare les voix
 
-- **Séparer les voix (Demucs)** — isole musique et bruitages des dialogues.
-  Nécessite Demucs et PyTorch (~2 Go) : `python run.py --install-extras`.
-- **Utiliser l'audio d'origine** — reprend la bande-son complète, dialogues
-  compris. Immédiat, mais on entend la voix d'origine sous la tienne.
+Le jeu joue un `_backing_track.mp3` derrière ta voix. **Il doit contenir la
+musique et les bruitages sans les dialogues.**
+
+Ce n'est pas une supposition : j'ai analysé un dub pack de la communauté qui
+fonctionne. Son fond sonore a un niveau dix fois plus faible que l'audio
+d'origine et n'est presque pas corrélé avec lui — les voix y ont bien été
+retirées. L'éditeur de référence le dit aussi noir sur blanc : il sépare les
+voix avec Demucs.
+
+**Utilise donc « Séparer les voix (Demucs) ».** L'option « Utiliser l'audio
+d'origine » n'est qu'un repli si tu n'as pas Demucs : le fond sonore contiendra
+alors les dialogues originaux, et tu t'entendras doubler par-dessus la voix
+d'origine.
+
+Demucs s'installe depuis **Réglages → Modules optionnels** (~2 Go, PyTorch).
 
 ## 8. Qualité de la détection des personnages
 

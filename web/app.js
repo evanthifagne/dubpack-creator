@@ -1291,6 +1291,7 @@ function setupExport() {
     };
     if (destination === 'game') body.target_path = $('#game-path').value.trim();
     if (destination === 'folder') body.target_path = $('#folder-path').value.trim();
+    if (destination === 'zip') body.zip_folder = $('#zip-path').value.trim() || null;
 
     if (destination === 'game' && !body.target_path) {
       toast('Indique d\'abord le dossier du jeu (Détecter ou Choisir).', 'err');
@@ -1306,6 +1307,7 @@ function setupExport() {
     saveSettingsPatch({
       export_destination: destination,
       export_folder: destination === 'folder' ? body.target_path : state.settings.export_folder,
+      zip_folder: destination === 'zip' ? body.zip_folder : state.settings.zip_folder,
       game_dir: destination === 'game' ? body.target_path : state.settings.game_dir,
     });
     try {
@@ -1426,6 +1428,7 @@ function showExportResult(result, projectId) {
   box.innerHTML = `<h3>${installed ? 'Pack installé dans le jeu' : 'Pack exporté'}</h3>
     <p>${result.clips} clips · ${result.characters.length} personnage(s) · ${result.files} fichiers</p>
     <p class="path">${escapeHtml(result.folder)}</p>
+    ${zipPath}
     <div class="btn-row">
       ${zipLink}
       <button class="btn btn-ghost" id="btn-reveal">Ouvrir le dossier</button>
@@ -1710,7 +1713,7 @@ function refreshDestination() {
   $('#zip-too-row').hidden = dest !== 'game';
   $('#btn-export').textContent = dest === 'game'
     ? 'Exporter et installer dans le jeu'
-    : dest === 'folder' ? 'Exporter dans ce dossier' : 'Exporter le dub pack';
+    : dest === 'folder' ? 'Exporter dans ce dossier' : 'Créer le ZIP';
 }
 
 async function saveSettingsPatch(patch) {
@@ -1736,6 +1739,7 @@ async function loadSettings() {
     setGameState(`Jeu sélectionné : ${s.game_dir}`, true);
   }
   if (s.export_folder) $('#folder-path').value = s.export_folder;
+  if (s.zip_folder) $('#zip-path').value = s.zip_folder;
   const dest = s.export_destination || (s.game_dir ? 'game' : 'zip');
   const radio = $$('input[name="dest"]').find((r) => r.value === dest);
   if (radio) radio.checked = true;
@@ -1833,6 +1837,18 @@ function setupDestination() {
       if (path) { $('#game-path').value = path; await selectGameDir(path); }
     } catch (err) { toast(err.message, 'err'); }
   });
+
+  $('#btn-pick-zip').addEventListener('click', async () => {
+    try {
+      const path = await pick('Où déposer le ZIP', $('#zip-path').value);
+      if (path) {
+        $('#zip-path').value = path;
+        saveSettingsPatch({ zip_folder: path });
+      }
+    } catch (err) { toast(err.message, 'err'); }
+  });
+  $('#zip-path').addEventListener('change', () =>
+    saveSettingsPatch({ zip_folder: $('#zip-path').value.trim() }));
 
   $('#btn-pick-folder').addEventListener('click', async () => {
     try {

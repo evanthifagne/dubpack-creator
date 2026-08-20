@@ -498,6 +498,7 @@ def api_export(project_id: str, payload: dict = Body(default={})) -> dict:
         raise HTTPException(status_code=400, detail="Destination inconnue.")
 
     target: str | None = None
+    zip_dir: str | None = None
     if destination == "game":
         target = payload.get("target_path") or gamedir.load_settings().get("game_dir")
         if not target:
@@ -516,6 +517,15 @@ def api_export(project_id: str, payload: dict = Body(default={})) -> dict:
         if not Path(target).expanduser().is_dir():
             raise HTTPException(status_code=400, detail=f"Dossier introuvable: {target}")
         target = str(Path(target).expanduser())
+    elif destination == "zip":
+        # Le ZIP peut etre depose dans un dossier choisi plutot que de rester
+        # dans le dossier de travail de l'outil.
+        wanted = payload.get("zip_folder")
+        if wanted:
+            folder = Path(wanted).expanduser()
+            if not folder.is_dir():
+                raise HTTPException(status_code=400, detail=f"Dossier introuvable: {wanted}")
+            zip_dir = str(folder)
 
     job = manager.create("export", project_id,
                          title=f"Export · {project.get('name', project_id)}")
@@ -528,7 +538,7 @@ def api_export(project_id: str, payload: dict = Body(default={})) -> dict:
         proj = dubpack.load_project(project_id)
         result = dubpack.export_pack(
             proj, cb=progress, reuse_video=reuse, dest_dir=target,
-            overwrite=overwrite, make_zip=make_zip,
+            overwrite=overwrite, make_zip=make_zip, zip_dir=zip_dir,
         )
         result["destination"] = destination
         proj["last_export"] = result
@@ -707,7 +717,7 @@ def api_get_settings() -> dict:
 def api_put_settings(payload: dict = Body(...)) -> dict:
     # Liste explicite: on n'ecrit pas n'importe quoi dans le fichier de reglages.
     allowed = {
-        "game_dir", "export_destination", "export_folder", "make_zip",
+        "game_dir", "export_destination", "export_folder", "zip_folder", "make_zip",
         "model", "language", "max_line", "detect_sounds", "sound_sensitivity",
         "use_embeddings", "video_height", "normalize_clips",
     }

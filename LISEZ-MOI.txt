@@ -25,7 +25,15 @@ DEMARRAGE RAPIDE (Windows)
          dans packs_voice. C'est pret a jouer.
        - "Dans un dossier de mon choix" : pour l'installer
          ou le partager plus tard.
-       - "ZIP a telecharger" : archive classique.
+       - "Une archive ZIP" : tu choisis ou elle est
+         deposee (Bureau, cle USB...).
+
+  IMPORTANT pour le fond sonore : utilise "Separer les
+  voix (Demucs)". Les packs de la communaute ont un fond
+  sonore SANS les dialogues - verifie sur un pack qui
+  fonctionne. "Utiliser l'audio d'origine" n'est qu'un
+  repli, et tu t'entendras alors doubler par-dessus la
+  voix originale.
 
 --------------------------------------------------------
 SI LE JEU N'EST PAS TROUVE AUTOMATIQUEMENT

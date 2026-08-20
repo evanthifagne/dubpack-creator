@@ -55,13 +55,21 @@ def ini_value(value: Any) -> str:
     return f'"{text}"'
 
 
-def write_ini(path: Path, data: dict[str, Any], section: str = "data") -> Path:
+def write_ini(path: Path, data: dict[str, Any], section: str = "data",
+              keep_empty: tuple[str, ...] = ()) -> Path:
+    """Écrit un fichier au format ConfigFile de Godot.
+
+    Fins de ligne CRLF et clés vides conservées quand demandé: on s'aligne sur
+    les packs produits par la communauté, qui sont la référence de ce qui
+    fonctionne réellement dans le jeu.
+    """
     lines = [f"[{section}]", ""]
     for key, value in data.items():
-        if value is None or (isinstance(value, (list, tuple, str)) and len(value) == 0):
+        empty = value is None or (isinstance(value, (list, tuple, str)) and len(value) == 0)
+        if empty and key not in keep_empty:
             continue
-        lines.append(f"{key}={ini_value(value)}")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        lines.append(f"{key}={ini_value('' if value is None else value)}")
+    path.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
     return path
 
 
@@ -282,7 +290,8 @@ def validate(project: dict) -> list[dict]:
 def export_pack(project: dict, cb: ProgressCb = None,
                 make_zip: bool = True, reuse_video: bool = True,
                 dest_dir: str | Path | None = None,
-                overwrite: bool = False) -> dict:
+                overwrite: bool = False,
+                zip_dir: str | Path | None = None) -> dict:
     """Construit le pack, éventuellement livré dans `dest_dir`.
 
     Le pack est toujours assemblé dans le dossier du projet puis recopié à
@@ -324,20 +333,31 @@ def export_pack(project: dict, cb: ProgressCb = None,
         shutil.copy2(cached, video_out)
     written.append("dub_video.ogv")
 
+    # Les images de réplique reprennent la taille exacte de la vidéo exportée,
+    # comme le fait le pack de référence. On la mesure au lieu de la déduire:
+    # l'encodage ne fait que réduire, jamais agrandir.
+    image_width = int(options.get("image_width", 0)) or None
+    if image_width is None:
+        produced = media.probe(video_out)
+        image_width = int(produced.get("width") or 0) or 640
+
     # 2) Fond sonore --------------------------------------------------------
     backing = project.get("assets", {}).get("backing_track")
     if backing and Path(backing).exists():
-        target = pack_dir / "_backing_track.ogg"
-        if Path(backing).suffix.lower() == ".ogg":
+        # Le pack de référence utilise `_backing_track.mp3`: on s'y aligne, c'est
+        # le seul format dont on sait qu'il est lu pour cette piste.
+        target = pack_dir / "_backing_track.mp3"
+        if Path(backing).suffix.lower() == ".mp3":
             shutil.copy2(backing, target)
         else:
-            media.encode_ogg(backing, target)
-        written.append("_backing_track.ogg")
+            media.encode_mp3(backing, target)
+        written.append("_backing_track.mp3")
     if cb:
         cb(0.4, "Découpage des répliques")
 
     # 3) Clips + métadonnées ------------------------------------------------
     normalize = bool(options.get("normalize_clips", True))
+    with_images = bool(options.get("clip_images", True))
     include_ts = bool(options.get("include_timestamp_in_name", False))
     dub_only = bool(options.get("dub_only", False))
     used: set[str] = set()
@@ -354,22 +374,33 @@ def export_pack(project: dict, cb: ProgressCb = None,
         media.cut_audio(source, pack_dir / f"{base}.ogg", start, end,
                         fmt="ogg", normalize=normalize)
 
+        # Une image par réplique, prise au milieu de celle-ci: c'est ce que le
+        # jeu affiche pendant la séquence. Le milieu montre le personnage en
+        # train de parler, alors que le tout début tombe souvent sur un plan
+        # de transition.
+        image_name: str | None = None
+        if with_images:
+            at = start + (end - start) / 2
+            if media.extract_thumbnail(source, pack_dir / f"{base}.png",
+                                       at=at, width=image_width):
+                image_name = f"{base}.png"
+                written.append(image_name)
+
         data: dict[str, Any] = {
             "caption": (line.get("text") or "").strip(),
-            "dub_timestamps": [round(start, 3)],
-            "dub_characters": [who],
         }
+        if image_name:
+            data["image"] = image_name
+        data["dub_timestamps"] = [round(start, 3)]
+        data["dub_characters"] = [who]
         tags = [t for t in (line.get("tags") or []) if str(t).strip()]
         if tags:
             data["tags"] = tags
         if dub_only or line.get("dub_only"):
             data["dub_only"] = True
-        image = line.get("image") or _character_image(project, line.get("speaker"))
-        if image:
-            data["images"] = [image]
-        write_ini(pack_dir / f"{base}.ini", data)
+        write_ini(pack_dir / f"{base}.txt", data)
 
-        written += [f"{base}.ogg", f"{base}.ini"]
+        written += [f"{base}.ogg", f"{base}.txt"]
         manifest.append({"file": f"{base}.ogg", "character": who, "start": round(start, 3),
                          "end": round(end, 3), "caption": data["caption"]})
         if cb:
@@ -379,12 +410,12 @@ def export_pack(project: dict, cb: ProgressCb = None,
     icon_name = None
     icon_src = project.get("assets", {}).get("icon")
     if icon_src and Path(icon_src).exists():
-        shutil.copy2(icon_src, pack_dir / "Icon.png")
-        icon_name = "Icon.png"
+        shutil.copy2(icon_src, pack_dir / "icon.png")
+        icon_name = "icon.png"
     else:
         at = float(lines[0]["start"]) + 0.2 if lines else 1.0
-        if media.extract_thumbnail(source, pack_dir / "Icon.png", at=at):
-            icon_name = "Icon.png"
+        if media.extract_thumbnail(source, pack_dir / "icon.png", at=at):
+            icon_name = "icon.png"
     if icon_name:
         written.append(icon_name)
 
@@ -397,36 +428,21 @@ def export_pack(project: dict, cb: ProgressCb = None,
             written.append(target.name)
 
     # 6) _pack_info.ini ------------------------------------------------------
+    # Ordre des clés repris du pack de référence.
     info: dict[str, Any] = {"title": pack_name}
-    if pack_info.get("subtitle"):
-        info["subtitle"] = pack_info["subtitle"]
+    if icon_name:
+        info["icon"] = icon_name
     authors = [a for a in (pack_info.get("authors") or []) if str(a).strip()]
     if authors:
         info["authors"] = authors
-    if pack_info.get("description"):
-        info["description"] = pack_info["description"]
-    if icon_name:
-        info["icon"] = icon_name
-    write_ini(pack_dir / "_pack_info.ini", info)
+    if pack_info.get("subtitle"):
+        info["subtitle"] = pack_info["subtitle"]
+    # Le pack de référence porte `readme`, et le conserve même vide.
+    info["readme"] = pack_info.get("description") or ""
+    write_ini(pack_dir / "_pack_info.ini", info, keep_empty=("readme",))
     written.append("_pack_info.ini")
 
-    # 7) Note d'installation + ZIP -----------------------------------------
-    (pack_dir / "README.txt").write_text(
-        f"{pack_name}\n"
-        f"{'=' * len(pack_name)}\n\n"
-        "Installation dans Choicer Voicer:\n"
-        f"  1. Copier le dossier « {safe_pack} » dans le dossier packs_voice du jeu.\n"
-        "  2. Ne pas ajouter de niveau de dossier supplémentaire:\n"
-        f"     packs_voice/{safe_pack}/dub_video.ogv doit exister.\n"
-        "  3. Lancer le jeu et choisir le pack en mode Dub.\n\n"
-        f"Répliques: {len(lines)}\n"
-        f"Personnages: {', '.join(sorted({m['character'] for m in manifest})) or '—'}\n"
-        "Généré avec DubPack Creator.\n",
-        encoding="utf-8",
-    )
-    written.append("README.txt")
-
-    # 8) Livraison à destination -------------------------------------------
+    # 7) Copie à destination -------------------------------------------------
     delivered = None
     if dest_dir:
         destination = Path(dest_dir).expanduser()
@@ -446,11 +462,14 @@ def export_pack(project: dict, cb: ProgressCb = None,
         shutil.copytree(pack_dir, final)
         delivered = str(final)
 
+    # 8) Archive ZIP ---------------------------------------------------------
     zip_path = None
     if make_zip:
         if cb:
             cb(0.9, "Création du ZIP")
-        zip_path = out_root / f"{safe_pack}.zip"
+        zip_root = Path(zip_dir).expanduser() if zip_dir else out_root
+        zip_root.mkdir(parents=True, exist_ok=True)
+        zip_path = zip_root / f"{safe_pack}.zip"
         if zip_path.exists():
             zip_path.unlink()
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:

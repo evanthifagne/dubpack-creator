@@ -206,8 +206,12 @@
 
       <div class="tab-body" data-body="export" hidden>
         <h3>Fond sonore</h3>
-        <p class="muted small">Le jeu peut jouer un <code>_backing_track.ogg</code> derrière ta voix :
-          musique et bruitages d'origine, sans les dialogues.</p>
+        <p class="muted small">Le jeu joue un <code>_backing_track.mp3</code> derrière ta voix :
+          musique et bruitages d'origine, <strong>sans les dialogues</strong>.
+          C'est ce que font les packs de la communauté — j'ai vérifié sur un pack
+          officiel : les voix y sont bien retirées. <strong>Utilise « Séparer les
+          voix »</strong>. L'audio d'origine ne sert que si tu n'as pas Demucs :
+          tu entendras alors la voix originale sous la tienne.</p>
         <div id="backing-state" class="backing-state"></div>
         <div class="btn-row">
           <button id="btn-demucs" class="btn btn-ghost">Séparer les voix (Demucs)</button>
@@ -246,8 +250,15 @@
           </div>
 
           <label class="dest"><input type="radio" name="dest" value="zip">
-            <span><strong>ZIP à télécharger</strong>
-              <small>reste dans le dossier de l'outil, à installer à la main</small></span></label>
+            <span><strong>Une archive ZIP</strong>
+              <small>pour partager le pack ou l'installer à la main</small></span></label>
+          <div class="dest-body" data-dest="zip" hidden>
+            <div class="btn-row">
+              <button id="btn-pick-zip" class="btn btn-ghost">Choisir le dossier…</button>
+            </div>
+            <label class="path-label"><span>Où déposer le ZIP</span>
+              <input id="zip-path" type="text" placeholder="Vide : reste dans le dossier de l'outil, avec un bouton de téléchargement" spellcheck="false"></label>
+          </div>
         </div>
 
         <label class="check"><input type="checkbox" id="opt-overwrite">

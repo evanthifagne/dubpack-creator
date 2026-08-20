@@ -232,6 +232,20 @@ def encode_ogv(src: str | Path, dst: str | Path, height: int = 720,
     return dst
 
 
+def encode_mp3(src: str | Path, dst: str | Path, bitrate: str = "192k",
+               cb: ProgressCb = None) -> Path:
+    """Encode une piste audio complète en MP3 (format du `_backing_track`)."""
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    duration = probe(src).get("duration", 0.0)
+    cmd = [
+        ffmpeg_path(), "-y", "-i", str(src), "-vn",
+        "-c:a", "libmp3lame", "-b:a", bitrate, "-ar", "44100", "-ac", "2", str(dst),
+    ]
+    _run_with_progress(cmd, duration, cb, "Encodage du fond sonore")
+    return dst
+
+
 def encode_ogg(src: str | Path, dst: str | Path, quality: int = 5,
                cb: ProgressCb = None) -> Path:
     """Encode une piste audio complète en Ogg Vorbis (ex: _backing_track.ogg)."""
