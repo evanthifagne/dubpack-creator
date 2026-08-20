@@ -53,6 +53,7 @@ def get_capabilities() -> dict:
     caps = capabilities()
     caps["asr_engines"] = asr.available_engines()
     caps["demucs"] = separate.available()
+    caps["embeddings"] = module_available("speechbrain")
     # find_spec ne suffit pas pour tkinter: l'extension C peut manquer.
     caps["picker"] = picker.available()
     return caps

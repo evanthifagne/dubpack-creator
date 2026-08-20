@@ -106,6 +106,7 @@ def suggest_names(lines: Sequence[Line], limit: int = 8) -> list[dict]:
             "name": name,
             "count": count,
             "vocative": vocative,
+            "mid_sentence": mid_sentence.get(name, 0),
             "said_by": dict(said_by.get(name, {})),
         })
     # Un nom employé en apostrophe est un bien meilleur candidat.
@@ -126,7 +127,12 @@ def auto_assign(lines: Sequence[Line], speakers: Sequence[str],
     if len(speakers) != 2 or not suggestions:
         return mapping
 
-    strong = [s for s in suggestions if s["vocative"] >= 1 and s["count"] >= 1]
+    # Renommer un personnage avec un mot mal transcrit est pire que de laisser
+    # « Personnage 1 »: on exige donc plusieurs indices concordants.
+    strong = [
+        s for s in suggestions
+        if s["vocative"] >= 1 and s["count"] >= 2 and s.get("mid_sentence", 0) >= 1
+    ]
     for item in strong:
         said_by = item["said_by"]
         if not said_by:

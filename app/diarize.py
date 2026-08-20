@@ -69,6 +69,31 @@ def _builtin_embeddings(audio: Path, lines: Sequence[Line], cb: ProgressCb) -> n
     return np.vstack(vectors) if vectors else np.zeros((0, 1), dtype=np.float32)
 
 
+def _cut_into(tree: np.ndarray, condensed: np.ndarray, wanted: int) -> np.ndarray:
+    """Découpe l'arbre en exactement `wanted` groupes.
+
+    `maxclust` renvoie parfois moins de groupes que demandé quand plusieurs
+    fusions se font à la même distance: on descend alors le seuil jusqu'à
+    obtenir le compte voulu, ce qui respecte le choix explicite de
+    l'utilisateur.
+    """
+    labels = fcluster(tree, t=wanted, criterion="maxclust")
+    if np.unique(labels).size == wanted:
+        return labels
+    # Recherche par seuil de distance, du plus large au plus fin.
+    heights = np.sort(np.unique(tree[:, 2]))
+    best = labels
+    for threshold in reversed(heights):
+        candidate = fcluster(tree, t=float(threshold) - 1e-9, criterion="distance")
+        count = np.unique(candidate).size
+        if count == wanted:
+            return candidate
+        if count > wanted:
+            break
+        best = candidate
+    return best
+
+
 def _silhouette(dist: np.ndarray, labels: np.ndarray) -> float:
     """Score de silhouette moyen à partir d'une matrice de distances."""
     uniq = np.unique(labels)
@@ -133,7 +158,7 @@ def cluster_speakers(vectors: np.ndarray, forced: int | None = None,
     tree = linkage(condensed, method=method)
 
     if forced and forced > 1:
-        labels = fcluster(tree, t=min(forced, n), criterion="maxclust")
+        labels = _cut_into(tree, condensed, min(forced, n))
         return labels - 1, _silhouette(dist, labels)
 
     best_labels = np.ones(n, dtype=int)

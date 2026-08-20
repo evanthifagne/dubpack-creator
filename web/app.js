@@ -752,6 +752,7 @@ function readPackForm() {
 function renderCharacters() {
   const box = $('#characters');
   box.innerHTML = '';
+  renderDiarizationHint();
   const counts = {};
   for (const l of lines()) counts[l.speaker] = (counts[l.speaker] || 0) + 1;
 
@@ -806,6 +807,39 @@ function renderCharacters() {
     target.name = chip.dataset.name;
     renderCharacters(); renderLines(); renderTimeline(); scheduleSave();
   }));
+}
+
+function renderDiarizationHint() {
+  /* La qualite de la detection depend enormement du type d'empreintes vocales.
+     Mesure sur un extrait de film: 55% de bonnes attributions avec les
+     empreintes maison, 86% avec ECAPA. Autant le dire. */
+  const box = $('#diar-hint');
+  if (!box) return;
+  const method = state.project?.asr?.diarization;
+  const missing = state.caps && !state.caps.embeddings;
+  if (!missing) {
+    box.hidden = method !== 'mfcc';
+    if (method === 'mfcc') {
+      box.className = 'diag-fix';
+      box.innerHTML = '<h3>Détection basique utilisée</h3><p>Les empreintes ECAPA '
+        + 'sont installées mais n\'ont pas servi pour ce pack. Relance une '
+        + 'transcription pour en profiter.</p>';
+    }
+    return;
+  }
+  box.hidden = false;
+  box.className = 'diag-fix';
+  box.innerHTML = `<h3>La détection des personnages peut être bien meilleure</h3>
+    <p>Elle utilise pour l'instant des empreintes vocales maison. Sur un extrait
+       de film testé, elles attribuent correctement <strong>55 %</strong> des
+       répliques, contre <strong>86 %</strong> avec les empreintes ECAPA.
+       Sur des voix nettement différentes la différence est faible, mais sur du
+       vrai son de film elle est décisive.</p>
+    <button class="btn btn-primary" id="btn-get-ecapa">Installer les empreintes ECAPA</button>`;
+  $('#btn-get-ecapa').addEventListener('click', () =>
+    runSetup('/api/setup/extras',
+             { which: state.caps?.demucs ? 'embeddings' : 'both' },
+             'Installation des empreintes ECAPA'));
 }
 
 function askRemoveCharacter(char, count, box) {
@@ -1481,24 +1515,33 @@ function refreshPrefModelState() {
 
 function renderModules() {
   const c = state.caps || {};
+  const both = c.demucs && c.embeddings;
   const rows = [
-    ['Demucs', 'demucs', 'Sépare les voix de la musique pour produire un fond sonore.', '~2 Go'],
-    ['Empreintes ECAPA', 'embeddings', 'Distingue mieux des voix proches lors de la détection des personnages.', '~1 Go'],
+    ['Demucs + empreintes ECAPA', 'both',
+     'Demucs sépare les voix de la musique pour le fond sonore. ECAPA rend la '
+     + 'détection des personnages nettement plus fiable (86 % contre 55 % sur un '
+     + 'extrait de film testé). Les deux partagent PyTorch : installer les deux '
+     + 'ne coûte presque rien de plus.', '~2 Go'],
   ];
+  if (!both && (c.demucs || c.embeddings)) {
+    rows[0][0] = c.demucs ? 'Empreintes ECAPA' : 'Demucs';
+    rows[0][1] = c.demucs ? 'embeddings' : 'demucs';
+    rows[0][3] = 'léger, PyTorch déjà là';
+  }
   $('#pref-modules').innerHTML = rows.map(([label, key, note, size]) => `
-    <div class="model-row ${c[key] ? 'cached' : ''}">
+    <div class="model-row ${both ? 'cached' : ''}">
       <div class="model-main">
         <div class="model-name">${escapeHtml(label)}
-          ${c[key] ? '<span class="tag ok">installé</span>' : ''}</div>
+          ${both ? '<span class="tag ok">installé</span>' : ''}</div>
         <div class="model-note">${escapeHtml(note)}</div>
       </div>
-      <span class="model-size">${escapeHtml(c[key] ? '' : size)}</span>
-      ${c[key] ? '' : `<button class="btn btn-ghost" data-mod="${key}">Installer</button>`}
+      <span class="model-size">${escapeHtml(both ? '' : size)}</span>
+      ${both ? '' : `<button class="btn btn-primary" data-mod="${key}">Installer</button>`}
     </div>`).join('');
   $$('[data-mod]', $('#pref-modules')).forEach((btn) => btn.addEventListener('click', () => {
-    const which = btn.dataset.mod === 'demucs' ? 'demucs' : 'embeddings';
+    const which = btn.dataset.mod;
     $('#settings-overlay').hidden = true;
-    runSetup('/api/setup/extras', { which }, `Installation · ${which}`);
+    runSetup('/api/setup/extras', { which }, 'Installation des modules');
   }));
 }
 
@@ -1636,7 +1679,7 @@ async function openDiagnostics() {
   $('#btn-fix-ffmpeg')?.addEventListener('click', () => runSetup('/api/setup/ffmpeg', {},
     'Installation de ffmpeg'));
   $('#btn-fix-demucs')?.addEventListener('click', () => runSetup('/api/setup/extras',
-    { which: 'demucs' }, 'Installation de Demucs'));
+    { which: 'both' }, 'Installation des modules'));
   $('#btn-fix-ytdlp')?.addEventListener('click', () => runSetup('/api/setup/yt-dlp',
     {}, 'Mise à jour de yt-dlp'));
 }

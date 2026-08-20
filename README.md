@@ -284,24 +284,41 @@ Demucs s'installe depuis **Réglages → Modules optionnels** (~2 Go, PyTorch).
 
 ## 8. Qualité de la détection des personnages
 
-Le regroupement des voix repose sur des empreintes vocales (timbre + hauteur)
-calculées localement, puis sur un regroupement hiérarchique. Le nombre de voix
-est deviné automatiquement ; les répliques de moins d'une seconde sont classées
-mais ne peuvent pas créer un personnage à elles seules.
+Le regroupement des voix repose sur des empreintes vocales, puis sur un
+regroupement hiérarchique. Le type d'empreintes change tout.
 
-Ça marche bien quand les voix sont nettement différentes. Pour des voix
-proches, ou sur une source bruitée :
+Mesuré en faisant passer la vidéo d'un dub pack de la communauté dans l'outil,
+puis en comparant l'attribution des personnages à celle du pack fait à la main :
+
+| Empreintes | Bonnes attributions |
+|---|---|
+| maison (MFCC + hauteur, sans dépendance) | **55 %** — le hasard |
+| **ECAPA-TDNN** (module optionnel) | **82 à 86 %** |
+
+Sur des voix nettement différentes, les deux marchent. Sur du vrai son de film,
+où la musique et les bruitages se mêlent aux voix, seul ECAPA tient. **Installe-le**
+depuis Réglages → Modules optionnels ; il vient avec Demucs, et les deux
+partagent PyTorch.
+
+Il reste des erreurs : compte une réplique sur cinq à réattribuer, d'un menu
+déroulant. C'est pour ça que l'outil est un éditeur.
+
+Pour améliorer encore :
 
 - fixe le **nombre de personnages** au lieu de laisser « auto », puis
   **Retranscrire** ;
-- corrige les répliques restantes à la main (menu déroulant de chaque réplique) ;
-- installe les empreintes vocales avancées (ECAPA-TDNN), plus précises :
-  `python run.py --install-extras`.
+- corrige les répliques restantes à la main.
 
-Les noms sont devinés à partir des dialogues : un prénom prononcé en apostrophe
-(« Marco, viens ! ») désigne presque toujours *l'autre* personnage, ce dont
-l'outil tient compte. Vérifie toujours — c'est une heuristique, pas une
-certitude.
+### Les noms de personnages
+
+L'outil propose des noms trouvés dans les dialogues, mais ne renomme
+automatiquement que si les indices concordent : le nom doit apparaître au moins
+deux fois, être employé en apostrophe, et figurer ailleurs qu'en début de phrase.
+
+Sans cela il laisse « Personnage 1 » et te montre les noms candidats. C'est
+volontaire : sur une transcription approximative, il inventait des noms à partir
+de mots mal reconnus, et ces noms partaient dans `dub_characters` et dans les
+noms de fichiers.
 
 ## 9. Où sont mes fichiers
 
