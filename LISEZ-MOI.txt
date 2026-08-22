@@ -3,7 +3,22 @@
  Creation de dub packs a partir d'une video
 ========================================================
 
-DEMARRAGE RAPIDE (Windows)
+LE PLUS SIMPLE : L'INSTALLEUR
+
+  Ce dossier ZIP est la version "scripts" de l'outil.
+  Si tu preferes une vraie application (double-clic,
+  raccourci, aucune installation de Python), telecharge
+  plutot DubPackCreator-Setup-<version>.exe sur :
+  https://github.com/evanthifagne/dubpack-creator/releases
+
+MISES A JOUR AUTOMATIQUES
+
+  Dans les deux modes, l'application se met a jour toute
+  seule : roue crantee -> Application -> "Installer et
+  redemarrer" quand une version est proposee. Plus besoin
+  de retelecharger quoi que ce soit ici.
+
+DEMARRAGE RAPIDE (Windows, version scripts)
 
   1. Double-clique sur INSTALLER.bat
      -> une seule fois, 5 a 15 minutes.

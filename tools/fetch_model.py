@@ -16,7 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-CACHE = ROOT / ".cache" / "models"
+DATA = Path(os.environ.get("DUBPACK_DATA_DIR") or ROOT)
+CACHE = DATA / ".cache" / "models"
 os.environ.setdefault("HF_HOME", str(CACHE))
 os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(CACHE))
 

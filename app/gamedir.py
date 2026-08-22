@@ -14,9 +14,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import ROOT
+from .config import DATA_DIR
 
-SETTINGS_FILE = ROOT / "settings.json"
+SETTINGS_FILE = DATA_DIR / "settings.json"
 
 PACKS_DIRNAME = "packs_voice"
 # Un dossier de jeu contient généralement ces frères et sœurs.

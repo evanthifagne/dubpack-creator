@@ -13,7 +13,7 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFil
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import asr, cancel, dubpack, gamedir, media, picker, pipeline, separate, sources
+from . import asr, cancel, dubpack, gamedir, media, picker, pipeline, separate, sources, update
 from .config import (DEFAULT_MODEL, PROJECTS_DIR, ROOT, WEB_DIR, capabilities,
                      configure_environment, diagnose, module_available,
                      reset_tool_cache)
@@ -23,6 +23,25 @@ app = FastAPI(title="DubPack Creator", docs_url=None, redoc_url=None)
 
 # Rend ffmpeg visible pour les outils externes (yt-dlp, Demucs) des le demarrage.
 configure_environment()
+
+
+@app.on_event("startup")
+def _startup_update_check() -> None:
+    """Vérifie l'existence d'une nouvelle version, sans bloquer le démarrage."""
+    if gamedir.load_settings().get("auto_update_check") is False:
+        return
+
+    import threading
+    import time as _time
+
+    def later() -> None:
+        _time.sleep(3)
+        try:
+            update.check()
+        except Exception:
+            pass
+
+    threading.Thread(target=later, daemon=True, name="update-check").start()
 
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
@@ -56,6 +75,10 @@ def get_capabilities() -> dict:
     caps["embeddings"] = module_available("speechbrain")
     # find_spec ne suffit pas pour tkinter: l'extension C peut manquer.
     caps["picker"] = picker.available()
+    from . import __version__
+
+    caps["version"] = __version__
+    caps["update"] = update.status()
     return caps
 
 
@@ -745,6 +768,7 @@ def api_put_settings(payload: dict = Body(...)) -> dict:
         "game_dir", "export_destination", "export_folder", "zip_folder", "make_zip",
         "model", "language", "max_line", "detect_sounds", "sound_sensitivity",
         "use_embeddings", "video_height", "normalize_clips", "auto_backing",
+        "auto_update_check",
     }
     return gamedir.save_settings({k: v for k, v in payload.items() if k in allowed})
 
@@ -808,6 +832,88 @@ def api_kill(job_id: str) -> dict:
     stopped = cancel.stop_processes(job_id, grace=1.0)
     job.killed_processes += stopped
     return {"stopped": stopped, "job": job.to_dict()}
+
+
+# ---------------------------------------------------------------------------
+# Santé, mise à jour, arrêt
+# ---------------------------------------------------------------------------
+
+@app.get("/api/health")
+def api_health() -> dict:
+    """Battement de coeur, utilisé par le lanceur et la page de redémarrage."""
+    from . import __version__
+
+    return {"ok": True, "app": "dubpack-creator", "version": __version__,
+            "busy": bool(manager.active())}
+
+
+@app.get("/api/update/status")
+def api_update_status() -> dict:
+    return update.status()
+
+
+@app.post("/api/update/check")
+def api_update_check() -> dict:
+    """Interroge GitHub tout de suite (bouton « Rechercher les mises à jour »)."""
+    return update.check(force=True)
+
+
+@app.post("/api/update/apply")
+def api_update_apply() -> dict:
+    """Télécharge la nouvelle version et la met en attente d'un redémarrage."""
+    if manager.active_for("_update"):
+        raise HTTPException(status_code=409, detail="Une mise à jour est déjà en cours.")
+    state = update.check(force=True)
+    if not state["available"]:
+        raise HTTPException(status_code=400,
+                            detail="Aucune mise à jour disponible: tu as déjà la dernière version.")
+    job = manager.create("update", "_update",
+                         title=f"Mise à jour vers {state['latest']}")
+
+    def work(job_ref, progress):
+        return update.stage(progress)
+
+    manager.run(job, work)
+    return {"job": job.to_dict()}
+
+
+@app.post("/api/update/restart")
+def api_update_restart(payload: dict = Body(default={})) -> dict:
+    """Redémarre le serveur pour appliquer la mise à jour en attente."""
+    busy = [j for j in manager.active() if j.project_id not in {"_update"}]
+    if busy and not payload.get("force"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"{len(busy)} tâche(s) en cours: attends leur fin ou annule-les avant de redémarrer.",
+        )
+    if not update.pending_version():
+        raise HTTPException(status_code=400, detail="Aucune mise à jour en attente.")
+    if not update.supervised():
+        return {
+            "restarting": False,
+            "message": ("Ferme puis relance DubPack Creator pour terminer la mise à jour: "
+                        "elle s'appliquera automatiquement au démarrage."),
+        }
+    update.restart_now()
+    return {"restarting": True}
+
+
+@app.post("/api/update/discard")
+def api_update_discard() -> dict:
+    return {"discarded": update.discard_pending()}
+
+
+@app.post("/api/quit")
+def api_quit(payload: dict = Body(default={})) -> dict:
+    """Arrête complètement l'application (serveur et lanceur)."""
+    busy = manager.active()
+    if busy and not payload.get("force"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"{len(busy)} tâche(s) en cours: attends leur fin, ou confirme pour arrêter quand même.",
+        )
+    update.restart_now(exit_code=0)
+    return {"quitting": True}
 
 
 @app.exception_handler(RuntimeError)

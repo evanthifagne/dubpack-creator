@@ -24,7 +24,20 @@ conservent leurs propres licences :
 
 La build Windows de FFmpeg installée automatiquement provient de
 [gyan.dev](https://www.gyan.dev/ffmpeg/builds/), la source recommandée par le
-projet FFmpeg.
+projet FFmpeg. Sous macOS, le binaire FFmpeg est celui de la roue Python
+[imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) (BSD-2, binaire
+FFmpeg sous LGPL/GPL).
+
+## Composants embarqués par l'installeur et l'application
+
+| Composant | Rôle | Licence |
+|---|---|---|
+| [CPython](https://www.python.org/) via [python-build-standalone](https://github.com/astral-sh/python-build-standalone) | interpréteur Python embarqué | PSF-2.0 |
+| Lanceur natif écrit en [Go](https://go.dev/) | démarrage, supervision, mises à jour | code du projet (MIT) ; runtime Go BSD-3 |
+| [Tabler Icons](https://tabler.io/icons) | icônes de l'interface | MIT |
+
+L'installeur Windows est construit avec [NSIS](https://nsis.sourceforge.io/)
+(licence zlib).
 
 ## Contenu que tu produis
 

@@ -74,6 +74,7 @@ async function loadCaps() {
   $('#btn-diag').title = blocking
     ? "Un composant nécessaire manque — clique pour voir et réparer"
     : 'Diagnostic et réparation';
+  renderUpdateBadge(c.update);
 
   for (const sel of ['#set-model', '#re-model']) {
     $(sel).innerHTML = c.models
@@ -1496,9 +1497,11 @@ function openSettings() {
     $('#pref-auto-backing').title = "Demucs n'est pas installé — voir Modules optionnels plus bas";
   }
   $('#pref-normalize').checked = p.normalize_clips !== false;
+  $('#pref-auto-update').checked = p.auto_update_check !== false;
   refreshPrefModelState();
   renderModules();
   renderModels();
+  renderUpdateArea(state.caps?.update);
   $('#settings-overlay').hidden = false;
 }
 
@@ -1558,6 +1561,7 @@ async function saveSettings() {
     normalize_clips: $('#pref-normalize').checked,
     auto_backing: $('#pref-auto-backing').checked,
     game_dir: $('#pref-game-dir').value.trim() || null,
+    auto_update_check: $('#pref-auto-update').checked,
   };
   await saveSettingsPatch(patch);
   applyPrefsToHome();
@@ -1565,8 +1569,161 @@ async function saveSettings() {
   toast('Réglages enregistrés.', 'ok');
 }
 
+/* -------------------------------------------------------- mises à jour */
+function renderUpdateBadge(u) {
+  const btn = $('#btn-update');
+  if (!btn) return;
+  const show = !!(u && (u.available || u.pending));
+  btn.hidden = !show;
+  if (!show) return;
+  $('#btn-update-label').textContent = u.pending
+    ? `Redémarrer pour finir la mise à jour ${u.pending}`
+    : `Version ${u.latest} disponible`;
+}
+
+function renderUpdateArea(u) {
+  const box = $('#update-area');
+  if (!box) return;
+  u = u || {};
+  const when = u.checked_at
+    ? new Date(u.checked_at * 1000).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+    : 'jamais';
+  let banner = '';
+  if (u.pending) {
+    banner = `
+      <div class="update-banner ready">
+        <div><strong>Version ${escapeHtml(u.pending)} prête.</strong>
+          Un redémarrage suffit pour l'appliquer — tes projets ne bougent pas.</div>
+        <button id="btn-update-restart" class="btn btn-primary">Redémarrer maintenant</button>
+      </div>`;
+  } else if (u.available) {
+    const notes = (u.notes || '').split('\n').slice(0, 6).join('\n').slice(0, 600);
+    banner = `
+      <div class="update-banner">
+        <div><strong>Version ${escapeHtml(u.latest)} disponible</strong>
+          ${u.title ? ` — ${escapeHtml(u.title)}` : ''}
+          ${notes ? `<pre class="update-notes">${escapeHtml(notes)}</pre>` : ''}
+        </div>
+        ${u.downloadable
+          ? '<button id="btn-update-install" class="btn btn-primary">Installer et redémarrer</button>'
+          : `<a class="btn btn-primary" href="${escapeHtml(u.page || '#')}" target="_blank" rel="noopener">Voir la nouvelle version</a>`}
+      </div>`;
+  }
+  box.innerHTML = `
+    <div class="update-line">
+      <span>Version installée : <strong>${escapeHtml(u.current || '?')}</strong>
+        <small class="muted"> — dernière vérification : ${escapeHtml(when)}</small></span>
+      <span class="update-actions">
+        <button id="btn-update-check" class="btn btn-ghost">Rechercher les mises à jour</button>
+        <button id="btn-quit-app" class="btn btn-ghost danger-ghost">Quitter DubPack Creator</button>
+      </span>
+    </div>
+    ${banner || (u.latest && !u.available ? '<p class="muted small">Tu as la dernière version.</p>' : '')}`;
+
+  $('#btn-update-check')?.addEventListener('click', checkForUpdates);
+  $('#btn-update-install')?.addEventListener('click', installUpdate);
+  $('#btn-update-restart')?.addEventListener('click', restartForUpdate);
+  $('#btn-quit-app')?.addEventListener('click', quitApp);
+}
+
+async function checkForUpdates() {
+  const btn = $('#btn-update-check');
+  if (btn) { btn.disabled = true; btn.textContent = 'Vérification…'; }
+  try {
+    const u = await api('/api/update/check', { method: 'POST' });
+    if (state.caps) state.caps.update = u;
+    renderUpdateArea(u);
+    renderUpdateBadge(u);
+    if (u.check_error) toast(`Impossible de joindre GitHub : ${u.check_error}`, 'err');
+    else if (!u.available && !u.pending) toast('Tu as déjà la dernière version.', 'ok');
+  } catch (err) {
+    toast(err.message, 'err');
+    if (btn) { btn.disabled = false; btn.textContent = 'Rechercher les mises à jour'; }
+  }
+}
+
+async function installUpdate() {
+  try {
+    const res = await api('/api/update/apply', { method: 'POST' });
+    $('#settings-overlay').hidden = true;
+    openJob(res.job, 'Mise à jour', async () => {
+      await restartForUpdate();
+    });
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+async function restartForUpdate() {
+  const before = state.caps?.version || state.caps?.update?.current || '';
+  try {
+    const res = await api('/api/update/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!res.restarting) {
+      toast(res.message || 'Ferme puis relance DubPack Creator pour terminer la mise à jour.', 'ok');
+      await loadCaps().catch(() => {});
+      renderUpdateArea(state.caps?.update);
+      return;
+    }
+  } catch (err) {
+    toast(err.message, 'err');
+    return;
+  }
+  $('#settings-overlay').hidden = true;
+  waitForRestart(before);
+}
+
+function waitForRestart(previousVersion) {
+  $('#restart-title').textContent = 'Redémarrage en cours…';
+  $('#restart-text').textContent = "La mise à jour s'applique. Cette page se rechargera toute seule dans quelques secondes.";
+  $('#restart-overlay').hidden = false;
+  const startedAt = Date.now();
+  let wasDown = false;
+  const probe = async () => {
+    if (Date.now() - startedAt > 180000) {
+      $('#restart-title').textContent = 'Le serveur met du temps à revenir';
+      $('#restart-text').textContent = 'Relance DubPack Creator à la main, puis recharge cette page.';
+      return;
+    }
+    try {
+      const h = await api('/api/health');
+      // On attend d'avoir vu le serveur tomber puis revenir: sinon on
+      // rechargerait sur l'ancienne instance, avant l'échange du code.
+      if (wasDown || (h.version && h.version !== previousVersion)) {
+        location.reload();
+        return;
+      }
+    } catch {
+      wasDown = true;
+    }
+    setTimeout(probe, 900);
+  };
+  setTimeout(probe, 1200);
+}
+
+async function quitApp() {
+  if (!confirm('Arrêter complètement DubPack Creator ?')) return;
+  try {
+    await api('/api/quit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  } catch (err) {
+    if (!confirm(`${err.message}\n\nArrêter quand même ?`)) return;
+    await api('/api/quit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: true }),
+    }).catch(() => {});
+  }
+  $('#settings-overlay').hidden = true;
+  $('#restart-title').textContent = 'DubPack Creator est arrêté';
+  $('#restart-text').textContent = 'Tu peux fermer cet onglet. Pour reprendre, relance l\'application.';
+  $('#restart-overlay').hidden = false;
+  $('.restart-spinner')?.remove();
+}
+
 function setupSettings() {
   $('#btn-settings').addEventListener('click', openSettings);
+  $('#btn-update').addEventListener('click', () => {
+    openSettings();
+    setTimeout(() => $('#update-area')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+  });
   $('#btn-settings-close').addEventListener('click', () => { $('#settings-overlay').hidden = true; });
   $('#settings-overlay').addEventListener('click', (e) => {
     if (e.target.id === 'settings-overlay') $('#settings-overlay').hidden = true;

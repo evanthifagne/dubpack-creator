@@ -21,6 +21,9 @@
     </div>
   </div>
   <div class="topbar-right">
+    <button id="btn-update" class="btn btn-ghost update-avail" hidden>
+      <svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>
+      <span id="btn-update-label">Mise à jour disponible</span></button>
     <button id="btn-settings" class="btn btn-icon" title="Réglages" aria-label="Réglages">
       <svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg></button>
     <button id="btn-diag" class="btn btn-ghost" title="Diagnostic et réparation">
@@ -390,10 +393,25 @@
     <h3><svg class="ic ic-sm" aria-hidden="true"><use href="#i-puzzle"/></svg> Modules optionnels</h3>
     <div id="pref-modules"></div>
 
+    <h3><svg class="ic ic-sm" aria-hidden="true"><use href="#i-refresh"/></svg> Application</h3>
+    <div id="update-area" class="update-area"></div>
+    <label class="check"><input type="checkbox" id="pref-auto-update">
+      <span>Vérifier les mises à jour automatiquement
+        <small>une simple vérification au démarrage — rien ne s'installe sans ton accord</small></span></label>
+
     <div class="btn-row" style="margin-top:18px">
       <button id="btn-settings-save" class="btn btn-primary">Enregistrer</button>
       <button id="btn-settings-reset" class="btn btn-ghost">Revenir aux valeurs conseillées</button>
     </div>
+  </div>
+</div>
+
+<div id="restart-overlay" class="overlay" hidden>
+  <div class="diag-card restart-card">
+    <h2 id="restart-title">Redémarrage en cours…</h2>
+    <p id="restart-text" class="muted">La mise à jour s'applique. Cette page se
+      rechargera toute seule dans quelques secondes.</p>
+    <div class="restart-spinner" aria-hidden="true"></div>
   </div>
 </div>
 

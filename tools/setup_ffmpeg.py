@@ -22,7 +22,8 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
-BIN = ROOT / "bin"
+DATA = Path(os.environ.get("DUBPACK_DATA_DIR") or ROOT)
+BIN = DATA / "bin"
 
 WINDOWS_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 NEEDED = ("ffmpeg", "ffprobe")

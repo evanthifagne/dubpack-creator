@@ -17,52 +17,88 @@ du modèle Whisper au premier lancement.
 
 ---
 
-## Installation rapide sur Windows
+## Installation
 
-**[⬇ Télécharger la dernière version](https://github.com/evanthifagne/dubpack-creator/releases/latest)**
+### Windows — l'installeur (recommandé)
 
-Décompresse le ZIP où tu veux, puis :
+**[⬇ Télécharger `DubPackCreator-Setup-<version>.exe`](https://github.com/evanthifagne/dubpack-creator/releases/latest)**
 
-1. Double-clique **`INSTALLER.bat`** — une seule fois, 5 à 15 minutes.
-   Il crée l'environnement Python, installe Whisper, met **ffmpeg** en place et
-   ajoute un raccourci sur le Bureau. Si Python manque, il t'indique exactement
-   quoi faire.
-2. Double-clique **`DEMARRER.bat`** (ou le raccourci du Bureau).
+1. Lance l'installeur. Aucun droit administrateur, aucune installation de
+   Python : **tout est fourni**, ffmpeg compris.
+   > SmartScreen peut afficher « Windows a protégé votre ordinateur » car
+   > l'installeur n'est pas signé : clique **Informations complémentaires →
+   > Exécuter quand même**.
+2. À la fin, coche « Lancer DubPack Creator ». Le navigateur s'ouvre sur une
+   page de démarrage : le premier lancement télécharge les composants de
+   transcription (quelques minutes, progression affichée), puis l'application
+   apparaît. Les lancements suivants sont immédiats.
+3. Ensuite, lance l'application depuis le raccourci du Bureau ou le menu
+   Démarrer. Pas de fenêtre noire : tout vit dans le navigateur. Pour
+   arrêter : roue crantée → **Quitter DubPack Creator**.
 
-Deux ZIP sont proposés :
+L'application s'installe dans `%LOCALAPPDATA%\DubPackCreator`. Tes projets,
+modèles et réglages y restent, même après une désinstallation.
 
-| Fichier | Taille | Quand le choisir |
-|---|---|---|
-| `DubPackCreator-Windows-v1.0.0-avec-ffmpeg.zip` | 72 Mo | **Recommandé.** ffmpeg est déjà dedans, rien à télécharger de plus. |
-| `DubPackCreator-Windows-v1.0.0.zip` | 75 Ko | Si tu préfères un petit fichier : ffmpeg est téléchargé pendant l'installation. |
+> **Tu utilisais l'ancienne version ZIP ?** Installe simplement l'installeur.
+> Pour retrouver tes anciens projets, copie le dossier `projects` de l'ancien
+> dossier vers `%LOCALAPPDATA%\DubPackCreator\projects`.
 
-Sur macOS, voir « Lancement » plus bas.
+### macOS — l'application
 
-## 1. Prérequis
+**[⬇ Télécharger `DubPackCreator-<version>-macOS.dmg`](https://github.com/evanthifagne/dubpack-creator/releases/latest)** *(Apple Silicon)*
 
-| Outil | Rôle | Installation |
-|---|---|---|
-| **Python 3.10+** | fait tourner l'outil | [python.org/downloads](https://www.python.org/downloads/) — sous Windows, cocher **« Add Python to PATH »** |
-| **ffmpeg** | découpe l'audio et encode la vidéo Theora | **Windows : automatique** (`INSTALLER.bat` s'en charge) · macOS : `brew install ffmpeg` |
+1. Ouvre le `.dmg` et glisse **DubPack Creator** dans **Applications**.
+2. Premier lancement : **clic droit → Ouvrir** (application non signée par
+   Apple), puis confirme. Les fois suivantes, un double-clic suffit.
+3. Le navigateur s'ouvre sur la page de démarrage ; le premier lancement
+   installe les composants (quelques minutes). ffmpeg est fourni — rien à
+   installer avec Homebrew.
 
-> **ffmpeg doit contenir `libtheora`.** Le jeu tourne sous Godot, qui ne lit que
-> l'Ogg Theora : sans cet encodeur, l'export de `dub_video.ogv` échoue.
-> L'installeur Windows récupère la build *essentials* de gyan.dev, qui contient
-> `libtheora` et `libvorbis`, et le vérifie. Sous macOS, la formule Homebrew les
-> contient aussi. Le bandeau en haut de l'interface te le confirme
-> (badge **Theora**).
+Les données vivent dans `~/Library/Application Support/DubPackCreator`.
 
-> Sous macOS avec le Python de Homebrew, la boîte de dialogue « Choisir le
-> dossier… » nécessite `brew install python-tk`. Sans elle, tu peux toujours
-> coller le chemin à la main. Le Python officiel de Windows l'inclut déjà.
+> Rappel : le jeu n'existe pas sur macOS. Tu peux préparer tes packs ici, puis
+> les transférer sur le PC Windows (export « Archive ZIP »).
 
-Le reste (Whisper, yt-dlp, serveur web) s'installe tout seul au premier
-lancement, dans un environnement Python isolé (`.venv/`).
+## Mises à jour automatiques
 
-## 1 bis. Télécharger les modèles à l'avance
+Plus besoin de retélécharger l'application : elle vérifie discrètement au
+démarrage si une nouvelle version existe (une simple lecture des releases
+GitHub — rien ne s'installe sans ton accord).
 
-Sur l'accueil, section **Modèles de transcription** → **Gérer**. Chaque modèle
-indique sa taille, ce qu'il vaut, et s'il est déjà présent :
+- Quand une version est disponible, un badge apparaît en haut de l'interface.
+- Roue crantée → **Application** → **Installer et redémarrer** : l'application
+  télécharge la nouvelle version (~150 Ko), vérifie son empreinte SHA-256,
+  l'applique et redémarre toute seule. La page se recharge automatiquement.
+- Tes projets, modèles et réglages ne sont jamais touchés. Si une mise à jour
+  ne démarre pas, l'application **revient automatiquement à la version
+  précédente**.
+- Réglable : la vérification automatique se désactive dans les réglages, et le
+  bouton **Rechercher les mises à jour** interroge GitHub à la demande.
+
+## Installation alternative (ZIP + scripts)
+
+Pour ceux qui préfèrent un dossier portable ou la ligne de commande :
+`DubPackCreator-Windows-<version>.zip` contient les scripts historiques.
+Il faut **Python 3.10+** ([python.org](https://www.python.org/downloads/),
+cocher « Add Python to PATH »).
+
+1. Décompresse le ZIP, double-clique **`INSTALLER.bat`** (une seule fois).
+2. Lance avec **`DEMARRER.bat`**. Les mises à jour automatiques fonctionnent
+   aussi dans ce mode.
+
+macOS / ligne de commande : `python3 run.py` depuis le dossier du projet
+(`./start.command` sur Mac). Options : `--port 8888`, `--no-browser`,
+`--install-extras` (Demucs + empreintes vocales).
+
+> **ffmpeg doit contenir `libtheora`** (le jeu tourne sous Godot, qui ne lit
+> que l'Ogg Theora). L'installeur et l'application le fournissent. En mode
+> ZIP : Windows le télécharge tout seul ; macOS utilise le ffmpeg installé par
+> pip, qui convient aussi.
+
+## Télécharger les modèles à l'avance
+
+Roue crantée → **Modèles de transcription**. Chaque modèle indique sa taille,
+ce qu'il vaut, et s'il est déjà présent :
 
 | Modèle | Taille | Pour quoi |
 |---|---|---|
@@ -73,40 +109,11 @@ indique sa taille, ce qu'il vaut, et s'il est déjà présent :
 | `large-v3` | 3,1 Go | Le plus précis, lent sans carte graphique dédiée. |
 | `large-v3-turbo` | 1,6 Go | Précision proche de large-v3, beaucoup plus rapide. |
 
-Le téléchargement affiche sa progression et s'annule proprement (un
-téléchargement interrompu est nettoyé, pas laissé à moitié). Le bouton
-**Supprimer** libère l'espace disque.
+Le téléchargement affiche sa progression et s'annule proprement. Sans cette
+étape, le modèle se télécharge tout seul au premier usage — c'est juste plus
+long à ce moment-là.
 
-Sans cette étape, le modèle se télécharge tout seul au premier usage — c'est
-juste plus long à ce moment-là. Sous le sélecteur de modèle, l'outil indique
-toujours si celui que tu as choisi est déjà prêt ou reste à télécharger.
-
-## 2. Lancement
-
-**macOS** — double-clique `start.command`
-*(au premier lancement : clic droit → Ouvrir, pour passer l'avertissement Gatekeeper).*
-
-**Windows** — double-clique `start.bat`
-
-**En ligne de commande** (les deux systèmes) :
-
-```bash
-python run.py
-```
-
-Le premier démarrage installe les dépendances (quelques minutes). Ensuite,
-l'outil ouvre `http://127.0.0.1:8760` dans ton navigateur. Laisse la fenêtre
-noire ouverte pendant l'utilisation ; `Ctrl+C` pour arrêter.
-
-Options utiles :
-
-```bash
-python run.py --port 8888        # changer de port
-python run.py --no-browser       # ne pas ouvrir le navigateur
-python run.py --install-extras   # ajouter Demucs + empreintes vocales avancées
-```
-
-## 3. Comment ça marche
+## Comment ça marche
 
 1. **Dépose ta vidéo** — fichier glissé, ou lien collé (YouTube et tous les
    sites gérés par yt-dlp).
@@ -128,7 +135,7 @@ python run.py --install-extras   # ajouter Demucs + empreintes vocales avancées
 5. **Onglet Export** — génère éventuellement le fond sonore, vérifie les
    avertissements, puis exporte. Tu récupères un dossier **et** un ZIP.
 
-## 3 bis. Les sons non parlés (cris, souffles, impacts)
+## Les sons non parlés (cris, souffles, impacts)
 
 Whisper transcrit de la parole. Un cri dans une bagarre, un souffle, un coup : ce
 n'est pas du texte, et la détection d'activité vocale les écarte activement.
@@ -160,7 +167,7 @@ bonne durée — le libellé, tu le corriges en deux secondes.
 Un son non parlé ne sert jamais à définir un personnage : il est rattaché à la
 voix la plus proche, sans peser sur la détection des voix.
 
-## 3 ter. Pendant le traitement
+## Pendant le traitement
 
 La fenêtre de suivi montre l'avancement, le **temps écoulé** et une **estimation
 du temps restant** dès que le rythme est mesurable. Quand une étape n'a pas
@@ -185,7 +192,7 @@ indique ce qui reste à arrêter, et un second appui force la coupure. Seule
 exception honnête : le téléchargement d'un modèle ne peut pas être interrompu en
 cours de route — la fenêtre le dit explicitement.
 
-## 4. Où atterrit le pack (onglet Export)
+## Où atterrit le pack (onglet Export)
 
 Trois destinations, au choix :
 
@@ -207,7 +214,7 @@ Si la détection ne trouve rien : dans le jeu, **Modpack Guides → Dub Mode Pac
 USB…). Laissé vide, le ZIP reste dans le dossier de l'outil avec un bouton de
 téléchargement.
 
-## 5. Installer le pack à la main
+## Installer le pack à la main
 
 1. Décompresse le ZIP (ou prends directement le dossier exporté).
 2. Copie le dossier du pack dans le dossier **`packs_voice`** du jeu.
@@ -217,7 +224,7 @@ téléchargement.
    `packs_voice/Mon Pack/Mon Pack/dub_video.ogv`.
 4. Lance le jeu et sélectionne le pack en mode Dub.
 
-## 6. Ce qui est exporté
+## Ce qui est exporté
 
 Structure calquée sur un dub pack de la communauté qui fonctionne en jeu :
 
@@ -264,7 +271,7 @@ Les clips sont en `.ogg` là où les packs de la communauté utilisent `.mp3`. L
 deux sont lus par le jeu — l'`.ogg` a été vérifié en jeu, et il est plus léger à
 qualité égale.
 
-## 7. Fond sonore : sépare les voix
+## Fond sonore : sépare les voix
 
 Le jeu joue un `_backing_track.mp3` derrière ta voix. **Il doit contenir la
 musique et les bruitages sans les dialogues.**
@@ -282,7 +289,7 @@ d'origine.
 
 Demucs s'installe depuis **Réglages → Modules optionnels** (~2 Go, PyTorch).
 
-## 8. Qualité de la détection des personnages
+## Qualité de la détection des personnages
 
 Le regroupement des voix repose sur des empreintes vocales, puis sur un
 regroupement hiérarchique. Le type d'empreintes change tout.
@@ -320,18 +327,22 @@ volontaire : sur une transcription approximative, il inventait des noms à parti
 de mots mal reconnus, et ces noms partaient dans `dub_characters` et dans les
 noms de fichiers.
 
-## 9. Où sont mes fichiers
+## Où sont mes fichiers
+
+Dans le dossier de données de l'application — `%LOCALAPPDATA%\DubPackCreator`
+sous Windows, `~/Library/Application Support/DubPackCreator` sous macOS, le
+dossier du projet en mode ZIP :
 
 - `projects/<date>/` — un dossier par projet : vidéo source, audio de travail,
   `project.json` (tes modifications, sauvegardées automatiquement) ;
 - `projects/<date>/export/` — le dossier du pack et son ZIP ;
 - `.cache/models/` — les modèles Whisper téléchargés (supprimable) ;
-- `.venv/` — l'environnement Python (supprimable ; il se recrée au lancement) ;
+- `code/` — le code de l'application, remplacé par les mises à jour ;
 - `settings.json` — le dossier du jeu et la destination d'export mémorisés.
 
 Supprimer un projet depuis l'accueil (🗑) efface tout son dossier.
 
-## 10. Quand une tâche échoue
+## Quand une tâche échoue
 
 Une fenêtre s'ouvre avec : le message, **ce qu'il y a à faire** quand la cause
 est reconnue (ffmpeg absent, refus de YouTube, disque plein, pack existant…), et
@@ -344,7 +355,7 @@ qu'il faut coller pour demander de l'aide.
 Les erreurs restent consultables après coup : **Diagnostic → Dernières tâches**,
 puis « voir le détail ».
 
-## 11. Le panneau Diagnostic
+## Le panneau Diagnostic
 
 Bouton **Diagnostic** en haut à droite (ou clic sur les pastilles de couleur).
 Il montre, sans deviner : le chemin exact de ffmpeg utilisé, les encodeurs
@@ -363,7 +374,7 @@ Si ffmpeg manque au démarrage, ce panneau s'ouvre tout seul.
 > presque toujours une mise en quarantaine — un gros exécutable non signé est un
 > faux positif classique. Autorise le dossier `bin/` de l'outil.
 
-## 12. En cas de problème
+## En cas de problème
 
 | Symptôme | Cause probable |
 |---|---|
@@ -377,10 +388,10 @@ Si ffmpeg manque au démarrage, ce panneau s'ouvre tout seul.
 | Le jeu n'est pas détecté | dans le jeu : Modpack Guides → Dub Mode Packs → Open Folder, puis colle le chemin |
 | « Un pack du même nom existe déjà » | coche « Remplacer un pack du même nom » avant d'exporter |
 | « ffmpeg is not installed » en collant un lien | corrigé en v1.0.3 : yt-dlp ne cherchait ffmpeg que dans le PATH, jamais dans `bin/`. Mets l'outil à jour |
-| Un lien vidéo échoue | `pip install -U yt-dlp` dans `.venv` : les sites changent souvent |
+| Un lien vidéo échoue | panneau Diagnostic → **Mettre yt-dlp à jour** : les sites changent souvent |
 | Le port est déjà pris | l'outil en choisit un autre automatiquement — lis l'URL affichée dans la console |
 
-## 13. Notes
+## Notes
 
 Le format de pack implémenté ici suit la documentation publique de *The Choicer
 Voicer* (dossier dans `packs_voice`, `dub_video.ogv` obligatoire,

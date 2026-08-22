@@ -2,7 +2,9 @@
 """Lanceur de DubPack Creator - Windows et macOS.
 
 Crée l'environnement Python isolé au premier lancement, installe les
-dépendances, démarre le serveur local puis ouvre le navigateur.
+dépendances, démarre le serveur local puis ouvre le navigateur. Reste ensuite
+en veille pour superviser le serveur: quand celui-ci s'arrête avec le code 42
+(« mise à jour prête »), il échange l'ancien code contre le nouveau et relance.
 
     python run.py                  # lancement normal
     python run.py --no-browser     # sans ouvrir le navigateur
@@ -13,7 +15,10 @@ dépendances, démarre le serveur local puis ouvre le navigateur.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -22,26 +27,17 @@ import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+DATA = Path(os.environ.get("DUBPACK_DATA_DIR") or ROOT)
 VENV = ROOT / ".venv"
 MIN_PY = (3, 10)
-STAMP = VENV / ".deps-ok"
+UPDATE = DATA / "update"
+
+# Code de sortie convenu avec le serveur: « applique la mise à jour puis relance ».
+RESTART_CODE = 42
 
 
 def venv_python() -> Path:
     return VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-
-
-def in_venv() -> bool:
-    """Sommes-nous dans l'environnement isolé du projet ?
-
-    On compare `sys.prefix`, et non le chemin de l'exécutable: dans un venv,
-    `bin/python` est un lien vers l'interpréteur système, donc les deux chemins
-    se résolvent vers le même binaire.
-    """
-    try:
-        return Path(sys.prefix).resolve() == VENV.resolve()
-    except OSError:
-        return False
 
 
 def log(message: str) -> None:
@@ -66,13 +62,25 @@ def pip_install(args: list[str], label: str) -> None:
         )
 
 
-def ensure_deps(extras: bool = False) -> None:
+def _req_hash() -> str:
     req = ROOT / "requirements.txt"
-    fresh = req.stat().st_mtime
-    if not STAMP.exists() or STAMP.stat().st_mtime < fresh:
+    return hashlib.sha256(req.read_bytes()).hexdigest() if req.exists() else "none"
+
+
+def ensure_deps(extras: bool = False) -> None:
+    """Installe les dépendances quand requirements.txt change réellement.
+
+    On compare le contenu (empreinte), pas la date: une mise à jour remplace le
+    fichier même quand la liste n'a pas bougé, et une date ne dit rien.
+    """
+    stamp = VENV / ".deps-ok"
+    current = _req_hash()
+    previous = stamp.read_text(encoding="utf-8").strip() if stamp.exists() else ""
+    if previous != current:
         pip_install(["--upgrade", "pip"], "Mise à jour de pip...")
-        pip_install(["-r", str(req)], "Installation des dépendances (quelques minutes)...")
-        STAMP.write_text("ok", encoding="utf-8")
+        pip_install(["-r", str(ROOT / "requirements.txt")],
+                    "Installation des dépendances (quelques minutes)...")
+        stamp.write_text(current, encoding="utf-8")
     if extras:
         pip_install(["-r", str(ROOT / "requirements-extra.txt")],
                     "Installation des modules optionnels (PyTorch : téléchargement lourd)...")
@@ -100,6 +108,100 @@ def wait_until_up(port: int, timeout: float = 90.0) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Application des mises à jour (préparées par le serveur dans update/pending)
+# ---------------------------------------------------------------------------
+
+def apply_pending_update() -> str | None:
+    """Échange le code contre la version en attente. Retourne la version, ou None.
+
+    L'ancien code part dans update/backup: si le nouveau ne démarre pas, on le
+    remet en place. Les projets, modèles et réglages ne sont pas concernés.
+    """
+    pending = UPDATE / "pending"
+    info_file = UPDATE / "pending.json"
+    if not pending.is_dir():
+        return None
+    version = "?"
+    try:
+        version = json.loads(info_file.read_text(encoding="utf-8")).get("version", "?")
+    except (OSError, ValueError):
+        pass
+    log(f"Application de la mise à jour {version}...")
+
+    backup = UPDATE / "backup"
+    if backup.exists():
+        shutil.rmtree(backup, ignore_errors=True)
+    backup.mkdir(parents=True, exist_ok=True)
+
+    moved: list[str] = []
+    try:
+        for item in sorted(pending.iterdir()):
+            target = ROOT / item.name
+            if target.exists():
+                shutil.move(str(target), str(backup / item.name))
+            shutil.move(str(item), str(target))
+            moved.append(item.name)
+    except OSError as exc:
+        log(f"Échange interrompu ({exc}) : retour à la version précédente.")
+        _restore_backup()
+        shutil.rmtree(pending, ignore_errors=True)
+        info_file.unlink(missing_ok=True)
+        return None
+
+    shutil.rmtree(pending, ignore_errors=True)
+    info_file.unlink(missing_ok=True)
+    (UPDATE / "applied.json").write_text(json.dumps({
+        "version": version, "at": time.time(), "files": moved,
+    }, ensure_ascii=False), encoding="utf-8")
+    log(f"Mise à jour {version} appliquée ({len(moved)} éléments).")
+    return version
+
+
+def _restore_backup() -> bool:
+    backup = UPDATE / "backup"
+    if not backup.is_dir():
+        return False
+    for item in sorted(backup.iterdir()):
+        target = ROOT / item.name
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True) if target.is_dir() else target.unlink(missing_ok=True)
+        shutil.move(str(item), str(target))
+    shutil.rmtree(backup, ignore_errors=True)
+    return True
+
+
+def rollback_if_broken(started_at: float, exit_code: int) -> bool:
+    """Le serveur vient-il de mourir aussitôt après une mise à jour ?
+
+    Dans ce cas on remet l'ancienne version: mieux vaut un outil qui marche
+    qu'une nouveauté qui plante.
+    """
+    applied = UPDATE / "applied.json"
+    if exit_code in (0, RESTART_CODE) or not applied.exists():
+        return False
+    lived = time.time() - started_at
+    if lived > 30:
+        return False
+    try:
+        info = json.loads(applied.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        info = {}
+    log(f"Le serveur s'est arrêté {lived:.0f}s après la mise à jour "
+        f"{info.get('version', '?')} : retour à la version précédente.")
+    if _restore_backup():
+        applied.unlink(missing_ok=True)
+        (UPDATE / "failed.txt").write_text(
+            f"La mise à jour {info.get('version', '?')} a été annulée: "
+            f"le serveur s'arrêtait aussitôt (code {exit_code}).",
+            encoding="utf-8",
+        )
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Lance DubPack Creator")
     parser.add_argument("--port", type=int, default=8760)
@@ -120,14 +222,9 @@ def main() -> int:
         print("  Télécharge-le sur https://www.python.org/downloads/")
         return 1
 
-    if not in_venv():
-        ensure_venv()
-        if not args.skip_install:
-            ensure_deps(extras=args.install_extras)
-        # On relance le script à l'intérieur de l'environnement isolé.
-        forwarded = [a for a in sys.argv[1:] if a != "--install-extras"]
-        return subprocess.run([str(venv_python()), str(ROOT / "run.py"),
-                               "--skip-install", *forwarded]).returncode
+    ensure_venv()
+    if not args.skip_install:
+        ensure_deps(extras=args.install_extras)
 
     port = free_port(args.port)
     if not port:
@@ -146,15 +243,38 @@ def main() -> int:
                 webbrowser.open(url)
         threading.Thread(target=opener, daemon=True).start()
 
-    import uvicorn
+    env = {**os.environ, "DUBPACK_SUPERVISED": "1",
+           "DUBPACK_DATA_DIR": str(DATA), "PYTHONUTF8": "1"}
+    retried_after_rollback = False
+    while True:
+        applied = apply_pending_update()
+        if applied and not args.skip_install:
+            # La nouvelle version peut demander de nouvelles dépendances.
+            ensure_deps()
+        started_at = time.time()
+        try:
+            proc = subprocess.Popen(
+                [str(venv_python()), str(ROOT / "run_server.py"), "--port", str(port)],
+                env=env, cwd=str(ROOT),
+            )
+            code = proc.wait()
+        except KeyboardInterrupt:
+            try:
+                proc.terminate()
+                proc.wait(timeout=10)
+            except Exception:
+                pass
+            code = 0
+        if code == RESTART_CODE:
+            log("Redémarrage demandé (mise à jour)...")
+            continue
+        if not retried_after_rollback and rollback_if_broken(started_at, code):
+            retried_after_rollback = True
+            continue
+        break
 
-    sys.path.insert(0, str(ROOT))
-    try:
-        uvicorn.run("app.main:app", host="127.0.0.1", port=port, log_level="warning")
-    except KeyboardInterrupt:
-        pass
     log("Serveur arrêté.")
-    return 0
+    return 0 if code in (0, RESTART_CODE) else code
 
 
 if __name__ == "__main__":

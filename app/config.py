@@ -9,11 +9,19 @@ from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PROJECTS_DIR = ROOT / "projects"
-WEB_DIR = ROOT / "web"
-BIN_DIR = ROOT / "bin"
-CACHE_DIR = ROOT / ".cache"
 
+# Le code et les données vivent séparément: une mise à jour remplace le dossier
+# du code, jamais les projets, les modèles téléchargés ni les réglages. Lancé
+# depuis le dépôt (développement, archive ZIP), les deux se confondent.
+DATA_DIR = Path(os.environ.get("DUBPACK_DATA_DIR") or ROOT).expanduser()
+
+PROJECTS_DIR = DATA_DIR / "projects"
+WEB_DIR = ROOT / "web"
+BIN_DIR = DATA_DIR / "bin"
+CACHE_DIR = DATA_DIR / ".cache"
+UPDATE_DIR = DATA_DIR / "update"
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 PROJECTS_DIR.mkdir(exist_ok=True)
 CACHE_DIR.mkdir(exist_ok=True)
 

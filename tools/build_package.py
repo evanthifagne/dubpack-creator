@@ -23,8 +23,8 @@ DIST = ROOT / "dist"
 # Ce qui part dans le paquet.
 INCLUDE_FILES = [
     "INSTALLER.bat", "DEMARRER.bat", "LISEZ-MOI.txt", "README.md",
-    "run.py", "requirements.txt", "requirements-extra.txt",
-    "start.bat", "start.command",
+    "run.py", "run_server.py", "requirements.txt", "requirements-extra.txt",
+    "start.bat", "start.command", "LICENSE", "THIRD-PARTY.md",
 ]
 INCLUDE_DIRS = ["app", "web", "tools"]
 # Fichiers Windows: fins de ligne CRLF, sinon l'Explorateur et cmd.exe

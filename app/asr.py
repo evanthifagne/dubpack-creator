@@ -260,11 +260,8 @@ def _load_whisper(model_name: str, cb: ProgressCb):
                        + " | ".join(problems))
 
 
-def _transcribe_faster_whisper(audio: Path, model_name: str, language: str | None,
-                               duration: float, cb: ProgressCb) -> tuple[list[Line], str]:
-    model, device, compute = _load_whisper(model_name, cb)
-    if cb and device == "cpu":
-        cb(0.03, "Transcription sur processeur")
+def _run_faster_whisper(model, audio: Path, language: str | None,
+                        duration: float, cb: ProgressCb) -> tuple[list[Line], str]:
     segments, info = model.transcribe(
         str(audio),
         language=language or None,
@@ -290,6 +287,37 @@ def _transcribe_faster_whisper(audio: Path, model_name: str, language: str | Non
             fraction = min(float(seg.end) / total, 0.99) if total else 0.5
             cb(fraction, "Transcription en cours")
     return lines, (getattr(info, "language", None) or language or "")
+
+
+def _transcribe_faster_whisper(audio: Path, model_name: str, language: str | None,
+                               duration: float, cb: ProgressCb) -> tuple[list[Line], str]:
+    from . import cancel
+
+    model, device, compute = _load_whisper(model_name, cb)
+    if cb and device == "cpu":
+        cb(0.03, "Transcription sur processeur")
+    try:
+        return _run_faster_whisper(model, audio, language, duration, cb)
+    except (cancel.Cancelled, KeyboardInterrupt):
+        raise
+    except BaseException as exc:  # noqa: BLE001
+        # Le chargement et l'essai à vide passent parfois là où la vraie
+        # transcription échoue ensuite (mémoire GPU saturée, bibliothèque CUDA
+        # chargée à retardement). Plutôt que d'échouer, on refait le travail
+        # sur le processeur: lent mais sûr.
+        if device == "cpu":
+            raise
+        message = str(exc) or exc.__class__.__name__
+        LAST_DEVICE.update(device="cpu", compute="int8",
+                           fallback=f"{device}/{compute} en cours de route: {message[:160]}")
+        del model
+        if cb:
+            cb(0.03, "Panne de la carte graphique — reprise sur processeur")
+        from faster_whisper import WhisperModel
+
+        model = WhisperModel(model_name, device="cpu", compute_type="int8",
+                             download_root=str(CACHE_DIR / "models"))
+        return _run_faster_whisper(model, audio, language, duration, cb)
 
 
 def _transcribe_mlx_whisper(audio: Path, model_name: str, language: str | None,
